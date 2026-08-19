@@ -1,0 +1,62 @@
+# ===============================================
+# Rust & Cargo 编译产物
+# ===============================================
+/target/
+**/*.rs.bk
+*.manifest.res
+*.rc
+
+# ===============================================
+# Node.js & Next.js 前端产物 (ui/)
+# ===============================================
+node_modules/
+ui/node_modules/
+ui/.next/
+ui/out/
+ui/build/
+ui/.vercel/
+ui/*.tsbuildinfo
+ui/npm-debug.log*
+ui/yarn-debug.log*
+ui/yarn-error.log*
+ui/.pnpm-debug.log*
+
+# ===============================================
+# 环境变量与敏感凭证 (绝对禁止提交到 Git)
+# ===============================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*service_account*.json
+*google*.json
+
+# ===============================================
+# 操作系统与 IDE 编辑器生成文件
+# ===============================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+ehthumbs.db
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===============================================
+# 日志、临时数据库与工具脚本
+# ===============================================
+*.log
+*.sqlite
+*.db
+generate-code-xml.cmd
+IndexFlow-core.xml

@@ -1,0 +1,18 @@
+[Unit]
+Description=IndexFlow Open Core Search Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/indexflow/backend/current
+ExecStart=/opt/indexflow/backend/current/indexflow-core
+Restart=always
+RestartSec=5
+
+# 读取随打包一起发布的 .env.production 或 .env 文件
+EnvironmentFile=-/opt/indexflow/backend/current/.env.production
+EnvironmentFile=-/opt/indexflow/backend/current/.env
+
+[Install]
+WantedBy=multi-user.target

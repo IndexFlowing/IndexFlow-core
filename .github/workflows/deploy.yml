@@ -1,0 +1,77 @@
+name: Deploy IndexFlow Core
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 1. 配置 Node 环境并编译前端
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd ui
+          npm ci
+
+      - name: Build Frontend (Next.js Static Export)
+        run: |
+          cd ui
+          npm run build
+
+      # 2. 配置 Rust 环境并编译后端
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Backend (Rust)
+        run: |
+          cargo build --release --locked
+
+      # 3. 严格对齐打包：将二进制、out 一起打包
+      - name: Package
+        run: |
+          mkdir -p deploy/ui
+          cp target/release/indexflow-core deploy/
+          
+          if [ -d "ui/out" ]; then
+            cp -r ui/out deploy/ui/
+          fi
+          
+          tar -czf indexflow-release.tar.gz -C deploy .
+
+      # 4. 配置 SSH
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # 5. 上传产物、部署脚本和服务配置文件
+      - name: Upload Package, Script and Service
+        run: |
+          scp indexflow-release.tar.gz scripts/deploy.sh scripts/indexflow-core.service \
+          ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/
+
+      # 6. 在服务器上执行部署
+      - name: Deploy
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          "chmod +x /tmp/deploy.sh && /tmp/deploy.sh /tmp/indexflow-release.tar.gz"
