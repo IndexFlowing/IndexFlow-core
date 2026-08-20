@@ -320,30 +320,16 @@ impl BingSubmitWorker {
         let result = self.health.check_url(&url.url).await;
 
         self.health_repo
-            .insert(
-                url.id,
-                result.http_status,
-                result.response_time_ms,
-                result.has_noindex,
-                result.has_canonical,
-            )
+            .insert_from_gate(url.id, &result)
             .await?;
 
-        self.urls
-            .apply_gate_result(
-                url.id,
-                result.http_status,
-                result.page_title.as_deref(),
-                result.canonical_url.as_deref(),
-            )
-            .await?;
+        self.urls.persist_seo_scan(url.id, &result).await?;
 
         if !result.passed {
             let reason = result
                 .block_reason
                 .unwrap_or_else(|| "quality gate failed".into());
             info!(url_id = url.id, url = %url.url, %reason, "blocked by quality gate");
-            self.urls.mark_blocked(url.id, &reason).await?;
             self.tasks.mark_success(task.id).await?;
             return Ok(false);
         }

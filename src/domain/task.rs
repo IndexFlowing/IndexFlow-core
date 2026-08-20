@@ -15,6 +15,8 @@ pub enum TaskType {
     SubmitBing,
     /// Engine-decoupled: Google-only submit pipeline (rolling 24h quota).
     SubmitGoogle,
+    /// Standalone GSC URL Inspection API (max 2,000/day).
+    GscInspect,
 }
 
 #[allow(dead_code)]
@@ -27,6 +29,7 @@ impl TaskType {
             Self::RetrySubmission => "RETRY_SUBMISSION",
             Self::SubmitBing => "SUBMIT_BING",
             Self::SubmitGoogle => "SUBMIT_GOOGLE",
+            Self::GscInspect => "GSC_INSPECT",
         }
     }
 
@@ -38,6 +41,7 @@ impl TaskType {
             "RETRY_SUBMISSION" => Ok(Self::RetrySubmission),
             "SUBMIT_BING" => Ok(Self::SubmitBing),
             "SUBMIT_GOOGLE" => Ok(Self::SubmitGoogle),
+            "GSC_INSPECT" => Ok(Self::GscInspect),
             other => Err(DomainError::InvalidTaskType(other.to_string())),
         }
     }
@@ -112,6 +116,8 @@ impl Task {
 /// Default priorities (lower number = higher priority).
 pub mod priority {
     pub const SYNC_SITEMAP: i32 = 10;
+    pub const CHECK_URL: i32 = 50;
+    pub const GSC_INSPECT: i32 = 70;
     pub const SUBMIT_URL: i32 = 80;
     #[allow(dead_code)]
     pub const RETRY: i32 = 90;

@@ -4,7 +4,7 @@
 
 [English](README.md) | [中文]
 
-内置多引擎独立调度、提交前 SEO 质量门禁、以及 Google 滚动 24 小时配额熔断 —— 专为 Programmatic SEO 站点、独立开发者和 SEO 工程师设计。
+四大解耦工作台（Sitemap 资产、SEO 质检、引擎推送、GSC 收录监控）、Google 滚动 24 小时配额熔断，以及 Search Analytics 豁免：已有展示的 URL 不再消耗 Indexing API 配额。
 
 ---
 
@@ -33,17 +33,17 @@ IndexFlow 从这些约束出发设计，而不是从演示级 Sitemap 出发。
 ## 核心特性
 
 - **高性能 Rust 后端** — Axum + Tokio + SQLx。低内存、高并发，轻松承载百万级 URL 元数据与状态机流转。
-- **搜索引擎独立解耦流水线**
-  - **Bing / IndexNow** — 万级批量瞬时推送
-  - **Google Indexing API** — 按滚动 24 小时配额窗口消耗，而不是简单的 UTC 日切计数
+- **四大独立工作台**（同一站点摘要头下）
+  - **Sitemap 资产** — 递归解析 XML / sitemap-index；locale、path prefix、lastmod、priority
+  - **SEO 质检** — 独立 HTTP 扫描（200、`<title>`、description、canonical、robots、H1），不触发推送
+  - **引擎推送** — Bing IndexNow 批量 vs Google Indexing API（滚动 24h 配额）分队列
+  - **收录监控** — GSC Search Analytics 批量收获 + URL Inspection 漏斗（2,000/天）
+- **GSC 配额豁免** — 有展示次数的页面标记为 `INDEXED` / `google_status=SUBMITTED`，不再占用每日 200 条 Indexing API
+- **单 URL 深度诊断抽屉** — 即时 Recheck SEO、立刻提交 Bing/Google、元标签信号、GSC coverage、原始响应
+- **Cloudflare WAF 绕过** — 所有页面爬虫携带内部 User-Agent
 - **多站点公平调度** — 窗口分区并发拉取，杜绝单一大站点垄断 Worker
-- **提交前实时 SEO 质量门禁** — 正式提交前的最后一毫秒发起轻量 GET
-  - 自动拦截非 200、`noindex`、Canonical 规范偏离、空 `<title>`
-  - 同时保护整站权重和稀缺的 Google 配额
-- **配额熔断** — Google 配额耗尽且 Bing 已完成时，待处理 Google 任务进入智能休眠，直到下一个空闲槽位；零无意义网络探测
-- **3 态守恒生命周期** — `PENDING`（待处理）+ `SUBMITTED`（已推送）+ `BLOCKED`（SEO 异常阻断）= `TOTAL`（总数）
-  - 各引擎进度独立
-  - 看板展示队列深度与配额释放倒计时
+- **配额熔断** — Google 耗尽后休眠到下一个空闲槽位，无空转探测
+- **3 态守恒生命周期** — `PENDING` + `SUBMITTED` + `BLOCKED` = `TOTAL`
 
 凭证状态：**未填写 (Unset)** / **已填写 (Saved)** / **已验证 (Verified)**。只有验证通过的通道才会进入推送。
 
@@ -85,6 +85,9 @@ DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/indexflow
 # Google 滚动 24 小时配额（默认 200）
 GOOGLE_DAILY_QUOTA=200
 
+# GSC URL Inspection 滚动 24 小时配额（默认 2000）
+GSC_INSPECT_DAILY_QUOTA=2000
+
 # 调度与 Worker 节流
 SCHEDULER_INTERVAL_SECS=60
 SUBMIT_WORKER_BATCH=50
@@ -105,7 +108,7 @@ cd ui && npm install && npm run build && cd ..
 cargo run
 ```
 
-Windows 可用 `start.ps1`：如有需要会先构建 `ui/out`，再启动 API。首次访问会引导创建管理员账号。之后添加站点，填写 IndexNow Key 和/或 Google Service Account JSON，点击 **测试 Bing** / **测试 Google** 直到通道状态为 **已验证**，再同步 Sitemap 并推送。
+Windows 可用 `start.ps1`：如有需要会先构建 `ui/out`，再启动 API。浏览器打开 `http://127.0.0.1:<SERVER_PORT>/`（本仓库默认 **8010**）。首次访问会引导创建管理员账号。添加站点后填写 IndexNow Key 和/或 Google Service Account JSON，点击 **测试 Bing** / **测试 Google** 直到通道为 **已验证**。GSC 同步还需把同一服务账号邮箱加为 Search Console 用户。四个选项卡可独立操作：同步 Sitemap、跑 SEO 审计、推送 Bing/Google、从 GSC 同步已收录 URL。
 
 ### 测试
 
@@ -119,20 +122,20 @@ cargo test
 ## 工作原理
 
 ```
-站点（独立工作单元）
-        │
-        ▼
-Sitemap 发现 URL  →  PENDING（待处理）
-        │
-        ▼
-提交前内联 SEO 质量门禁
-        │
-   通过 ├──────────► Bing / Google 独立流水线  →  SUBMITTED（已推送）
-        │
-   拦截 └──────────► BLOCKED（质量门禁拦截）
+[ 模块 1：Sitemap 资产 ]  ── 唯一数据源（仅 SYNC_SITEMAP）
+            │
+            ├──► [ 模块 2：SEO 质检 ]     CHECK_URL（独立）
+            ├──► [ 模块 3：引擎推送 ]     SUBMIT_BING / SUBMIT_GOOGLE
+            └──► [ 模块 4：收录监控 ]     GSC Analytics + GSC_INSPECT
 ```
 
-Bing 与 Google 是独立任务类型（`SUBMIT_BING`、`SUBMIT_GOOGLE`）。同一 URL 可以已推送 Bing，同时仍在等待 Google。超过超时仍处于 `PROCESSING` 的僵尸任务会被自动回收，避免服务崩溃后死锁。
+- 同步 Sitemap 不会排队 SEO 或推送任务。
+- SEO 审计不会排队 Bing/Google 推送。
+- GSC Search Analytics（impressions &gt; 0）标记 `google_index_status=INDEXED`，豁免 Google Indexing API 配额。
+- GSC URL Inspection 填充漏斗：已收录 / 已抓取未收录 / 已发现未收录 / 未知（每天最多 2,000）。
+- 点击任意 URL 打开诊断抽屉（`GET /urls/:id/analysis`、`POST /urls/:id/recheck`、`POST /urls/:id/submit-now`）。
+
+超时仍处于 `PROCESSING` 的僵尸任务会被自动回收，避免服务崩溃后死锁。
 
 ---
 

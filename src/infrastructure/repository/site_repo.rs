@@ -226,4 +226,37 @@ impl SiteRepo {
         };
         Ok(site)
     }
+
+    pub async fn set_gsc_property(
+        &self,
+        id: i64,
+        property_url: &str,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE sites
+            SET gsc_property_url = $2, updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(property_url)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn mark_gsc_analytics_synced(&self, id: i64) -> anyhow::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE sites
+            SET gsc_analytics_synced_at = NOW(), updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }

@@ -29,11 +29,14 @@ export function formatNumber(n: number): string {
 /** Status badge color classes */
 export function statusTone(status: string): string {
   const s = status.toUpperCase();
-  if (["READY", "SUCCESS", "SUBMITTED", "ACTIVE"].includes(s)) {
+  if (["READY", "SUCCESS", "SUBMITTED", "ACTIVE", "INDEXED"].includes(s)) {
     return "bg-emerald-950/70 text-emerald-400 border-emerald-800/50";
   }
-  if (["PENDING", "PROCESSING", "SCANNING"].includes(s)) {
+  if (["PENDING", "PROCESSING", "SCANNING", "CRAWLED_NOT_INDEXED"].includes(s)) {
     return "bg-amber-950/70 text-amber-400 border-amber-800/50";
+  }
+  if (["DISCOVERED_NOT_INDEXED"].includes(s)) {
+    return "bg-orange-950/70 text-orange-300 border-orange-800/50";
   }
   if (["BLOCKED", "FAILED", "NEED_ATTENTION"].includes(s)) {
     return "bg-rose-950/70 text-rose-400 border-rose-800/50";
@@ -58,11 +61,16 @@ export function statusLabel(status: string): string {
     PROCESSING: "Running",
     SUCCESS: "Success",
     SYNC_SITEMAP: "Sync sitemap",
-    CHECK_URL: "SEO quality gate (retired)",
+    CHECK_URL: "SEO quality audit",
     SUBMIT_URL: "Inspect SEO & submit",
     SUBMIT_BING: "Submit to Bing",
     SUBMIT_GOOGLE: "Submit to Google",
+    GSC_INSPECT: "GSC URL inspection",
     RETRY_SUBMISSION: "Retry submission",
+    INDEXED: "Indexed",
+    CRAWLED_NOT_INDEXED: "Crawled — not indexed",
+    DISCOVERED_NOT_INDEXED: "Discovered — not indexed",
+    UNKNOWN: "Unknown",
     ACTIVE: "Active",
     RECOVERING: "Recovering",
     INDEX: "Sitemap Index",
@@ -90,6 +98,13 @@ export function httpStatusLabel(code: number | null | undefined): string {
     503: "Service Unavailable",
   };
   return map[code] || "";
+}
+
+export function formatBytes(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 export function formatHttpDiag(

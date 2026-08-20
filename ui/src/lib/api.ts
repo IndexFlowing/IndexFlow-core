@@ -3,15 +3,34 @@ import { authHeader, clearSession } from "@/lib/auth";
 /** API base: same origin when served by Axum; Next dev proxies /api → :8010 */
 const API = "/api/v1";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeader(),
-      ...(init?.headers || {}),
-    },
-  });
+type RequestInitEx = RequestInit & { timeoutMs?: number };
+
+async function request<T>(path: string, init?: RequestInitEx): Promise<T> {
+  const timeoutMs = init?.timeoutMs ?? 20_000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      ...init,
+      signal: init?.signal ?? ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader(),
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (e) {
+    const aborted =
+      (e instanceof DOMException && e.name === "AbortError") ||
+      (e instanceof Error && e.name === "AbortError");
+    if (aborted) {
+      throw new Error("Request timed out — is the IndexFlow API running?");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -152,6 +171,15 @@ export interface UrlItem {
   google_submitted_at: string | null;
   bing_error: string | null;
   google_error: string | null;
+  meta_description: string | null;
+  h1_content: string | null;
+  google_index_status: string;
+  google_coverage_state: string | null;
+  google_last_crawled_at: string | null;
+  google_inspected_at: string | null;
+  bing_index_status: string;
+  bing_last_crawled_at: string | null;
+  bing_inspected_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +207,13 @@ export interface UrlDiagnostic {
   last_http_status: number | null;
   last_checked_at: string | null;
   last_submitted_at: string | null;
+  meta_description: string | null;
+  h1_content: string | null;
+  google_index_status: string;
+  google_coverage_state: string | null;
+  google_last_crawled_at: string | null;
+  google_inspected_at: string | null;
+  bing_index_status: string;
   updated_at: string;
 }
 
@@ -189,7 +224,117 @@ export interface HealthCheck {
   response_time: number | null;
   has_noindex: boolean;
   has_canonical: boolean;
+  meta_description: string | null;
+  h1_content: string | null;
+  robots_directive: string | null;
+  payload_bytes: number | null;
+  hreflang: string | null;
   checked_at: string;
+}
+
+export interface HreflangAlt {
+  lang: string;
+  href: string;
+}
+
+export interface UrlSignals {
+  title: string | null;
+  title_chars: number;
+  meta_description: string | null;
+  meta_description_chars: number;
+  h1: string | null;
+  canonical_url: string | null;
+  canonical_matches: boolean | null;
+  robots: string | null;
+  hreflang: HreflangAlt[];
+  http_status: number | null;
+  response_time_ms: number | null;
+  payload_bytes: number | null;
+}
+
+export interface UrlGscTrail {
+  index_status: string;
+  coverage_state: string | null;
+  last_crawled_at: string | null;
+  inspected_at: string | null;
+}
+
+export interface UrlAnalysis {
+  url: UrlItem;
+  signals: UrlSignals;
+  gsc: UrlGscTrail;
+  recent_checks: HealthCheck[];
+  recent_submissions: SubmissionLog[];
+}
+
+export interface RecheckResult {
+  url: UrlItem;
+  passed: boolean;
+  block_reason: string | null;
+  gate: {
+    http_status: number | null;
+    response_time_ms: number | null;
+    page_title: string | null;
+    meta_description: string | null;
+    h1_content: string | null;
+    canonical_url: string | null;
+    robots_directive: string | null;
+    payload_bytes: number | null;
+    passed: boolean;
+    block_reason: string | null;
+  };
+}
+
+export interface SubmitNowResult {
+  url: UrlItem;
+  provider: string;
+  success: boolean;
+  status_code: number | null;
+  response_body: string | null;
+  message: string;
+  quota_exempt: boolean;
+}
+
+export interface SeoStats {
+  site_id: number;
+  checked: number;
+  unchecked: number;
+  blocked: number;
+  http_status: { http_status: number | null; count: number }[];
+  block_reasons: { reason: string; count: number }[];
+}
+
+export interface IndexMonitorStats {
+  funnel: {
+    site_id: number;
+    indexed: number;
+    crawled_not_indexed: number;
+    discovered_not_indexed: number;
+    unknown: number;
+    inspected_24h: number;
+  };
+  gsc_inspect_quota_total: number;
+  gsc_inspect_used_24h: number;
+  gsc_inspect_remaining: number;
+  gsc_inspect_pending: number;
+  gsc_property_url: string | null;
+  gsc_analytics_synced_at: string | null;
+}
+
+export interface GscSyncResult {
+  success: boolean;
+  property_url: string;
+  pages_from_gsc: number;
+  urls_marked_indexed: number;
+  message: string;
+}
+
+export interface GscInspectEnqueueResult {
+  success: boolean;
+  tasks_created: number;
+  quota_used_24h: number;
+  quota_remaining: number;
+  message: string;
 }
 
 export interface SubmissionLog {
@@ -239,6 +384,7 @@ export interface ConfigInfo {
   worker_poll_interval_secs: number;
   submit_worker_batch: number;
   google_daily_quota: number;
+  gsc_inspect_daily_quota?: number;
 }
 
 export interface DashboardCounts {
@@ -292,9 +438,13 @@ export interface UrlListOpts {
   path_prefix?: string;
   page?: number;
   limit?: number;
+  seo_checked?: boolean;
+  google_index_status?: string;
 }
 
-function qs(params: Record<string, string | number | undefined | null>): string {
+function qs(
+  params: Record<string, string | number | boolean | undefined | null>
+): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v != null && v !== "") q.set(k, String(v));
@@ -308,7 +458,7 @@ function qs(params: Record<string, string | number | undefined | null>): string 
 export const api = {
   health: () => request<{ status: string }>("/health"),
 
-  authStatus: () => request<AuthStatus>("/auth/status"),
+  authStatus: () => request<AuthStatus>("/auth/status", { timeoutMs: 8000 }),
 
   authSetup: (username: string, password: string) =>
     request<AuthTokenResponse>("/auth/setup", {
@@ -380,6 +530,42 @@ export const api = {
       method: "POST",
     }),
 
+  startSubmitBing: (siteId: number) =>
+    request<WorkflowResult>(`/sites/${siteId}/submit-bing`, {
+      method: "POST",
+    }),
+
+  startSubmitGoogle: (siteId: number) =>
+    request<WorkflowResult>(`/sites/${siteId}/submit-google`, {
+      method: "POST",
+    }),
+
+  seoAuditFull: (siteId: number) =>
+    request<WorkflowResult>(`/sites/${siteId}/seo/audit`, {
+      method: "POST",
+    }),
+
+  seoAuditUnchecked: (siteId: number) =>
+    request<WorkflowResult>(`/sites/${siteId}/seo/audit-unchecked`, {
+      method: "POST",
+    }),
+
+  getSeoStats: (siteId: number) => request<SeoStats>(`/sites/${siteId}/seo-stats`),
+
+  getIndexStats: (siteId: number) =>
+    request<IndexMonitorStats>(`/sites/${siteId}/index-stats`),
+
+  gscSyncAnalytics: (siteId: number) =>
+    request<GscSyncResult>(`/sites/${siteId}/gsc/sync-analytics`, {
+      method: "POST",
+      timeoutMs: 180_000,
+    }),
+
+  gscInspectBatch: (siteId: number) =>
+    request<GscInspectEnqueueResult>(`/sites/${siteId}/gsc/inspect-batch`, {
+      method: "POST",
+    }),
+
   testBing: (siteId: number) =>
     request<ChannelTestResult>(`/sites/${siteId}/test-bing`, {
       method: "POST",
@@ -409,10 +595,26 @@ export const api = {
         path_prefix: opts?.path_prefix,
         page: opts?.page,
         limit: opts?.limit,
+        seo_checked: opts?.seo_checked,
+        google_index_status: opts?.google_index_status,
       })}`
     ),
 
   getUrl: (id: number) => request<UrlDetail>(`/urls/${id}`),
+
+  getUrlAnalysis: (id: number) => request<UrlAnalysis>(`/urls/${id}/analysis`),
+
+  recheckUrl: (id: number) =>
+    request<RecheckResult>(`/urls/${id}/recheck`, {
+      method: "POST",
+      timeoutMs: 30_000,
+    }),
+
+  submitUrlNow: (id: number, provider: "bing" | "google") =>
+    request<SubmitNowResult>(`/urls/${id}/submit-now`, {
+      method: "POST",
+      body: JSON.stringify({ provider }),
+    }),
 
   listTasks: (opts?: { status?: string; page?: number; limit?: number }) =>
     request<PageResponse<Task>>(

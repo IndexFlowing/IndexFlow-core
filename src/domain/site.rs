@@ -115,6 +115,10 @@ pub struct Site {
     pub google_verified_at: Option<DateTime<Utc>>,
     /// When set and in the future, skip Google submits (daily quota exhausted).
     pub google_quota_paused_until: Option<DateTime<Utc>>,
+    /// Last successful GSC Search Analytics bulk harvest.
+    pub gsc_analytics_synced_at: Option<DateTime<Utc>>,
+    /// Cached Search Console property URL (`sc-domain:` or `https://…/`).
+    pub gsc_property_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -186,92 +190,5 @@ impl Site {
     /// Has any filled credential (for UI / prompts).
     pub fn has_any_credentials_filled(&self) -> bool {
         self.has_bing_credentials() || self.has_google_credentials()
-    }
-}
-
-/// Whether a site can do real submit work right now (no HTTP involved).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SitePushability {
-    /// At least one engine can accept work, or leftover tasks can be drained.
-    Ready,
-    /// Enabled engines are unusable: Google 24h quota is locked and Bing has nothing left.
-    SleepQuota,
-    /// No verified provider at all.
-    FailNoProvider,
-}
-
-/// Site-level circuit breaker.
-///
-/// `has_bing_work` is true when a claimable `SUBMIT_URL` still needs Bing.
-/// Google readiness already encodes the rolling-quota pause (`google_ready()`).
-pub fn decide_site_push(
-    bing_ready: bool,
-    google_ready: bool,
-    google_verified: bool,
-    has_bing_work: bool,
-) -> SitePushability {
-    if (bing_ready && has_bing_work) || google_ready {
-        return SitePushability::Ready;
-    }
-    if google_verified && !google_ready {
-        return SitePushability::SleepQuota;
-    }
-    if !bing_ready && !google_verified {
-        return SitePushability::FailNoProvider;
-    }
-    // Bing is ready but every claimable URL is already on Bing; Google is not a channel.
-    SitePushability::Ready
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn site_ready_when_bing_still_has_work_even_if_google_paused() {
-        assert_eq!(
-            decide_site_push(true, false, true, true),
-            SitePushability::Ready
-        );
-    }
-
-    #[test]
-    fn site_sleeps_when_google_paused_and_bing_has_no_work() {
-        assert_eq!(
-            decide_site_push(true, false, true, false),
-            SitePushability::SleepQuota
-        );
-    }
-
-    #[test]
-    fn site_sleeps_when_google_paused_and_bing_not_ready() {
-        assert_eq!(
-            decide_site_push(false, false, true, false),
-            SitePushability::SleepQuota
-        );
-    }
-
-    #[test]
-    fn site_fails_when_no_verified_provider() {
-        assert_eq!(
-            decide_site_push(false, false, false, false),
-            SitePushability::FailNoProvider
-        );
-    }
-
-    #[test]
-    fn site_ready_when_google_has_quota() {
-        assert_eq!(
-            decide_site_push(false, true, true, false),
-            SitePushability::Ready
-        );
-    }
-
-    #[test]
-    fn site_drains_when_bing_done_and_google_not_configured() {
-        assert_eq!(
-            decide_site_push(true, false, false, false),
-            SitePushability::Ready
-        );
     }
 }

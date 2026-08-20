@@ -22,36 +22,49 @@ pub fn engine_needs_submit(status: &str) -> bool {
     s == ENGINE_NONE || s == ENGINE_FAILED
 }
 
-/// Whether a single URL should pay for an SEO quality-gate HTTP fetch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UrlPushDecision {
-    /// At least one currently available engine still needs a submit.
-    FetchAndSubmit,
-    /// Remaining work is only Google, and Google is 24h-quota locked.
-    SleepUntilQuota,
-    /// Every currently enabled/available engine is already done (or there is nothing to do).
-    AlreadyDone,
+/// GSC / index coverage stored on `urls.google_index_status`.
+pub const GINDEX_UNKNOWN: &str = "UNKNOWN";
+pub const GINDEX_INDEXED: &str = "INDEXED";
+pub const GINDEX_CRAWLED_NOT_INDEXED: &str = "CRAWLED_NOT_INDEXED";
+pub const GINDEX_DISCOVERED_NOT_INDEXED: &str = "DISCOVERED_NOT_INDEXED";
+
+/// True when GSC (Search Analytics or URL Inspection) confirmed the URL is indexed.
+pub fn google_is_indexed(index_status: &str) -> bool {
+    index_status.eq_ignore_ascii_case(GINDEX_INDEXED)
 }
 
-/// URL-level circuit: decide *before* fetching the page.
-pub fn decide_url_push(
-    bing_ready: bool,
-    google_ready: bool,
-    google_verified: bool,
+/// Map a GSC `coverageState` string onto our funnel bucket.
+pub fn coverage_to_index_status(coverage: &str) -> &'static str {
+    let l = coverage.to_ascii_lowercase();
+    if l.contains("not indexed") {
+        if l.contains("crawled") {
+            GINDEX_CRAWLED_NOT_INDEXED
+        } else if l.contains("discovered") {
+            GINDEX_DISCOVERED_NOT_INDEXED
+        } else {
+            GINDEX_UNKNOWN
+        }
+    } else if l.contains("indexed") {
+        GINDEX_INDEXED
+    } else {
+        GINDEX_UNKNOWN
+    }
+}
+
+/// True when every **enabled** engine failed (used to mark BLOCKED after severe submit failure).
+#[allow(dead_code)]
+pub fn all_enabled_engines_failed(
+    bing_enabled: bool,
+    google_enabled: bool,
     bing_status: &str,
     google_status: &str,
-) -> UrlPushDecision {
-    let bing_needed = bing_ready && engine_needs_submit(bing_status);
-    let google_needed_now = google_ready && engine_needs_submit(google_status);
-    if bing_needed || google_needed_now {
-        return UrlPushDecision::FetchAndSubmit;
+) -> bool {
+    if !bing_enabled && !google_enabled {
+        return false;
     }
-    let google_waiting =
-        google_verified && !google_ready && engine_needs_submit(google_status);
-    if google_waiting {
-        return UrlPushDecision::SleepUntilQuota;
-    }
-    UrlPushDecision::AlreadyDone
+    let bing_failed = !bing_enabled || bing_status.eq_ignore_ascii_case(ENGINE_FAILED);
+    let google_failed = !google_enabled || google_status.eq_ignore_ascii_case(ENGINE_FAILED);
+    bing_failed && google_failed
 }
 
 /// Resolve the 3-state lifecycle from per-engine outcomes.
@@ -73,21 +86,6 @@ pub fn resolve_lifecycle_after_submit(
     } else {
         UrlStatus::Pending
     }
-}
-
-/// True when every enabled engine ended this attempt in `FAILED` (no success).
-pub fn all_enabled_engines_failed(
-    bing_enabled: bool,
-    google_enabled: bool,
-    bing_status: &str,
-    google_status: &str,
-) -> bool {
-    if !bing_enabled && !google_enabled {
-        return false;
-    }
-    let bing_fail = !bing_enabled || bing_status.eq_ignore_ascii_case(ENGINE_FAILED);
-    let google_fail = !google_enabled || google_status.eq_ignore_ascii_case(ENGINE_FAILED);
-    bing_fail && google_fail
 }
 
 /// URL lifecycle — 3 mutually exclusive final states.
@@ -158,9 +156,18 @@ pub struct Url {
     pub path_prefix: String,
     pub page_title: Option<String>,
     pub canonical_url: Option<String>,
+    pub meta_description: Option<String>,
+    pub h1_content: Option<String>,
     pub block_reason: Option<String>,
     pub bing_status: String,
     pub google_status: String,
+    pub google_index_status: String,
+    pub google_coverage_state: Option<String>,
+    pub google_last_crawled_at: Option<DateTime<Utc>>,
+    pub google_inspected_at: Option<DateTime<Utc>>,
+    pub bing_index_status: String,
+    pub bing_last_crawled_at: Option<DateTime<Utc>>,
+    pub bing_inspected_at: Option<DateTime<Utc>>,
     pub bing_submitted_at: Option<DateTime<Utc>>,
     pub google_submitted_at: Option<DateTime<Utc>>,
     pub bing_error: Option<String>,
@@ -350,46 +357,6 @@ mod tests {
     }
 
     #[test]
-    fn url_push_fetches_when_an_available_engine_needs_work() {
-        assert_eq!(
-            decide_url_push(true, false, true, "NONE", "NONE"),
-            UrlPushDecision::FetchAndSubmit
-        );
-        assert_eq!(
-            decide_url_push(true, true, true, "SUBMITTED", "NONE"),
-            UrlPushDecision::FetchAndSubmit
-        );
-        assert_eq!(
-            decide_url_push(false, true, true, "NONE", "FAILED"),
-            UrlPushDecision::FetchAndSubmit
-        );
-    }
-
-    #[test]
-    fn url_push_sleeps_when_only_google_remains_and_quota_is_locked() {
-        assert_eq!(
-            decide_url_push(true, false, true, "SUBMITTED", "NONE"),
-            UrlPushDecision::SleepUntilQuota
-        );
-        assert_eq!(
-            decide_url_push(false, false, true, "NONE", "NONE"),
-            UrlPushDecision::SleepUntilQuota
-        );
-    }
-
-    #[test]
-    fn url_push_skips_fetch_when_nothing_actionable_remains() {
-        assert_eq!(
-            decide_url_push(true, true, true, "SUBMITTED", "SUBMITTED"),
-            UrlPushDecision::AlreadyDone
-        );
-        assert_eq!(
-            decide_url_push(true, false, false, "SUBMITTED", "NONE"),
-            UrlPushDecision::AlreadyDone
-        );
-    }
-
-    #[test]
     fn lifecycle_stays_pending_until_every_enabled_engine_submits() {
         assert_eq!(
             resolve_lifecycle_after_submit(true, true, "SUBMITTED", "NONE"),
@@ -419,6 +386,32 @@ mod tests {
         assert!(all_enabled_engines_failed(true, false, "FAILED", "NONE"));
         assert!(!all_enabled_engines_failed(true, true, "SUBMITTED", "FAILED"));
         assert!(!all_enabled_engines_failed(true, true, "FAILED", "NONE"));
+    }
+
+    #[test]
+    fn coverage_state_maps_to_funnel() {
+        assert_eq!(
+            coverage_to_index_status("Submitted and indexed"),
+            GINDEX_INDEXED
+        );
+        assert_eq!(
+            coverage_to_index_status("Indexed, not submitted in sitemap"),
+            GINDEX_INDEXED
+        );
+        assert_eq!(
+            coverage_to_index_status("Crawled - currently not indexed"),
+            GINDEX_CRAWLED_NOT_INDEXED
+        );
+        assert_eq!(
+            coverage_to_index_status("Discovered - currently not indexed"),
+            GINDEX_DISCOVERED_NOT_INDEXED
+        );
+        assert_eq!(
+            coverage_to_index_status("URL is unknown to Google"),
+            GINDEX_UNKNOWN
+        );
+        assert!(google_is_indexed("INDEXED"));
+        assert!(!google_is_indexed("UNKNOWN"));
     }
 
     #[test]

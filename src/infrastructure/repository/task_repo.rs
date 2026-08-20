@@ -1,4 +1,4 @@
-use crate::domain::{ProviderKind, Task, TaskStatus, TaskType};
+use crate::domain::{Task, TaskStatus, TaskType};
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
@@ -75,6 +75,42 @@ impl TaskRepo {
     ) -> anyhow::Result<u64> {
         self.create_engine_tasks_batch(site_id, url_ids, fallback_priority, TaskType::SubmitGoogle)
             .await
+    }
+
+    /// Create CHECK_URL tasks for the standalone SEO quality scanner.
+    pub async fn create_check_tasks_batch(
+        &self,
+        site_id: i64,
+        url_ids: &[i64],
+        fallback_priority: i32,
+    ) -> anyhow::Result<u64> {
+        self.create_engine_tasks_batch(site_id, url_ids, fallback_priority, TaskType::CheckUrl)
+            .await
+    }
+
+    /// Create GSC_INSPECT tasks (URL Inspection API).
+    pub async fn create_gsc_inspect_tasks_batch(
+        &self,
+        site_id: i64,
+        url_ids: &[i64],
+        fallback_priority: i32,
+    ) -> anyhow::Result<u64> {
+        self.create_engine_tasks_batch(site_id, url_ids, fallback_priority, TaskType::GscInspect)
+            .await
+    }
+
+    pub async fn count_pending_type(&self, site_id: i64, task_type: TaskType) -> anyhow::Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)::bigint FROM tasks
+            WHERE site_id = $1 AND task_type = $2 AND status IN ('PENDING', 'PROCESSING')
+            "#,
+        )
+        .bind(site_id)
+        .bind(task_type.as_str())
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
     }
 
     /// Internal: create engine-typed tasks for a batch of URL ids.
@@ -210,89 +246,6 @@ impl TaskRepo {
         .fetch_all(&self.pool)
         .await?;
         Ok(tasks)
-    }
-
-    /// True when a claimable SUBMIT_URL for this site still needs the given engine.
-    pub async fn has_claimable_engine_work(
-        &self,
-        site_id: i64,
-        engine: ProviderKind,
-    ) -> anyhow::Result<bool> {
-        let sql = match engine {
-            ProviderKind::Bing => {
-                r#"
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM tasks t
-                    INNER JOIN urls u ON u.id = t.url_id
-                    WHERE t.site_id = $1
-                      AND t.status = 'PENDING'
-                      AND t.task_type = 'SUBMIT_URL'
-                      AND t.scheduled_at <= NOW()
-                      AND UPPER(u.bing_status) IN ('NONE', 'FAILED')
-                )
-                "#
-            }
-            ProviderKind::Google => {
-                r#"
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM tasks t
-                    INNER JOIN urls u ON u.id = t.url_id
-                    WHERE t.site_id = $1
-                      AND t.status = 'PENDING'
-                      AND t.task_type = 'SUBMIT_URL'
-                      AND t.scheduled_at <= NOW()
-                      AND UPPER(u.google_status) IN ('NONE', 'FAILED')
-                )
-                "#
-            }
-        };
-        let row: (bool,) = sqlx::query_as(sql)
-            .bind(site_id)
-            .fetch_one(&self.pool)
-            .await?;
-        Ok(row.0)
-    }
-
-    /// Sleep claimable tasks that cannot use any engine that is available right now.
-    ///
-    /// When `bing_ready` is true, Bing-needed URLs stay claimable; everything else
-    /// (typically Google-only rows while the 24h quota is locked) is put to sleep.
-    /// When `bing_ready` is false, every claimable row is slept.
-    pub async fn sleep_pending_without_available_engine(
-        &self,
-        site_id: i64,
-        task_type: TaskType,
-        scheduled_at: DateTime<Utc>,
-        error: &str,
-        bing_ready: bool,
-    ) -> anyhow::Result<u64> {
-        let result = sqlx::query(
-            r#"
-            UPDATE tasks t
-            SET
-                scheduled_at = $2,
-                last_error = $3,
-                updated_at = NOW()
-            FROM urls u
-            WHERE t.url_id = u.id
-              AND t.site_id = $1
-              AND t.status = $4
-              AND t.task_type = $5
-              AND t.scheduled_at <= NOW()
-              AND NOT ($6::bool AND UPPER(u.bing_status) IN ('NONE', 'FAILED'))
-            "#,
-        )
-        .bind(site_id)
-        .bind(scheduled_at)
-        .bind(error)
-        .bind(TaskStatus::Pending.as_str())
-        .bind(task_type.as_str())
-        .bind(bing_ready)
-        .execute(&self.pool)
-        .await?;
-        Ok(result.rows_affected())
     }
 
     /// Sleep every claimable task of this type until `scheduled_at` (quota circuit).
@@ -517,7 +470,7 @@ impl TaskRepo {
             SELECT * FROM tasks
             WHERE status = 'FAILED'
               AND retry_count < $1
-              AND task_type IN ('SUBMIT_URL', 'RETRY_SUBMISSION', 'SYNC_SITEMAP', 'SUBMIT_BING', 'SUBMIT_GOOGLE')
+              AND task_type IN ('SUBMIT_URL', 'RETRY_SUBMISSION', 'SYNC_SITEMAP', 'SUBMIT_BING', 'SUBMIT_GOOGLE', 'CHECK_URL', 'GSC_INSPECT')
             ORDER BY finished_at ASC NULLS FIRST
             LIMIT $2
             "#,

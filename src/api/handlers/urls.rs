@@ -1,5 +1,5 @@
-use super::{internal_err, not_found, AppState};
-use crate::api::dto::{FacetQuery, ListQuery, PageResponse};
+use super::{bad_request, internal_err, not_found, AppState};
+use crate::api::dto::{FacetQuery, ListQuery, PageResponse, SubmitNowRequest};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -56,6 +56,8 @@ pub async fn list_url_diagnostics(
             q.path_prefix.as_deref(),
             page,
             limit,
+            q.seo_checked,
+            q.google_index_status.as_deref(),
         )
         .await
         .map_err(internal_err)?;
@@ -124,5 +126,51 @@ pub async fn get_url(
         Ok(Some(detail)) => Ok((StatusCode::OK, Json(serde_json::json!(detail)))),
         Ok(None) => Err(not_found("url not found")),
         Err(e) => Err(internal_err(e)),
+    }
+}
+
+pub async fn url_analysis(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.url_service.analysis(id).await {
+        Ok(Some(detail)) => Ok((StatusCode::OK, Json(serde_json::json!(detail)))),
+        Ok(None) => Err(not_found("url not found")),
+        Err(e) => Err(internal_err(e)),
+    }
+}
+
+pub async fn url_recheck(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.url_service.recheck(id).await {
+        Ok(Some(r)) => Ok((StatusCode::OK, Json(serde_json::json!(r)))),
+        Ok(None) => Err(not_found("url not found")),
+        Err(e) => Err(internal_err(e)),
+    }
+}
+
+pub async fn url_submit_now(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(payload): Json<SubmitNowRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.url_service.submit_now(id, &payload.provider).await {
+        Ok(Some(r)) => Ok((StatusCode::OK, Json(serde_json::json!(r)))),
+        Ok(None) => Err(not_found("url not found")),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("BLOCKED")
+                || msg.contains("not configured")
+                || msg.contains("not verified")
+                || msg.contains("quota")
+                || msg.contains("provider must")
+            {
+                Err(bad_request(&msg))
+            } else {
+                Err(internal_err(e))
+            }
+        }
     }
 }

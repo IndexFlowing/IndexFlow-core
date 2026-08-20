@@ -1,4 +1,5 @@
-use crate::domain::{canonical_matches_page, QualityGateResult};
+use crate::domain::{canonical_matches_page, HreflangAlt, QualityGateResult};
+use crate::infrastructure::INTERNAL_CRAWLER_UA;
 use reqwest::header::HeaderMap;
 use reqwest::redirect::Policy;
 use reqwest::Client;
@@ -16,7 +17,7 @@ impl HealthService {
     pub fn new(_shared: Client) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(15))
-            .user_agent("MandarinClips-Internal-SeoBot-Secret888")
+            .user_agent(INTERNAL_CRAWLER_UA)
             .redirect(Policy::none())
             .build()
             .expect("failed to build quality-gate HTTP client");
@@ -32,12 +33,9 @@ impl HealthService {
                 return QualityGateResult {
                     http_status: None,
                     response_time_ms: Some(start.elapsed().as_millis() as i32),
-                    has_noindex: false,
-                    has_canonical: false,
-                    page_title: None,
-                    canonical_url: None,
                     passed: false,
                     block_reason: Some(format!("request failed: {e}")),
+                    ..QualityGateResult::default()
                 };
             }
         };
@@ -69,6 +67,23 @@ pub fn evaluate_page(
     let inspected = inspect_html(body);
     let has_noindex = has_noindex_header || inspected.has_noindex;
 
+    let robots_directive = {
+        let mut parts = Vec::new();
+        if !x_robots.trim().is_empty() {
+            parts.push(format!("x-robots-tag: {}", x_robots.trim()));
+        }
+        if let Some(m) = inspected.robots_meta.as_deref() {
+            parts.push(format!("meta robots: {m}"));
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("; "))
+        }
+    };
+
+    let payload_bytes = i32::try_from(body.len()).ok().or(Some(i32::MAX));
+
     let block_reason = if status_code != 200 {
         Some(format!("HTTP {status_code}"))
     } else if has_noindex {
@@ -79,7 +94,12 @@ pub fn evaluate_page(
         } else {
             None
         }
-    } else if inspected.page_title.as_ref().map(|t| t.is_empty()).unwrap_or(true) {
+    } else if inspected
+        .page_title
+        .as_ref()
+        .map(|t| t.is_empty())
+        .unwrap_or(true)
+    {
         Some("Missing <title> tag".to_string())
     } else {
         None
@@ -103,6 +123,11 @@ pub fn evaluate_page(
         has_canonical: inspected.canonical_url.is_some(),
         page_title: inspected.page_title,
         canonical_url: inspected.canonical_url,
+        meta_description: inspected.meta_description,
+        h1_content: inspected.h1_content,
+        robots_directive,
+        hreflang: inspected.hreflang,
+        payload_bytes,
         passed,
         block_reason,
     }
@@ -113,14 +138,28 @@ struct HtmlInspect {
     has_noindex: bool,
     page_title: Option<String>,
     canonical_url: Option<String>,
+    meta_description: Option<String>,
+    h1_content: Option<String>,
+    robots_meta: Option<String>,
+    hreflang: Vec<HreflangAlt>,
 }
 
 fn inspect_html(html: &str) -> HtmlInspect {
     let lower = html.to_ascii_lowercase();
+    let robots_meta = extract_meta_content(html, &lower, "robots")
+        .or_else(|| extract_meta_content(html, &lower, "googlebot"));
+    let robots_l = robots_meta
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase();
     HtmlInspect {
-        has_noindex: detect_noindex(&lower),
+        has_noindex: robots_l.contains("noindex") || detect_noindex(&lower),
         page_title: extract_title(html, &lower),
         canonical_url: extract_canonical(html, &lower),
+        meta_description: extract_meta_content(html, &lower, "description"),
+        h1_content: extract_h1(html, &lower),
+        robots_meta,
+        hreflang: extract_hreflang(html, &lower),
     }
 }
 
@@ -145,15 +184,59 @@ fn find_meta_robots(lower: &str) -> Option<usize> {
     NEEDLES.iter().filter_map(|n| lower.find(n)).min()
 }
 
+/// Slice `html[start..end]` only when both offsets are UTF-8 char boundaries.
+fn safe_slice(html: &str, start: usize, end: usize) -> Option<&str> {
+    if start <= end
+        && end <= html.len()
+        && html.is_char_boundary(start)
+        && html.is_char_boundary(end)
+    {
+        Some(&html[start..end])
+    } else {
+        None
+    }
+}
+
 fn extract_title(html: &str, lower: &str) -> Option<String> {
-    let start = lower.find("<title")?;
-    let after_gt = html[start..].find('>')? + start + 1;
-    let end_rel = lower.get(after_gt..)?.find("</title>")?;
-    let raw = html[after_gt..after_gt + end_rel].trim();
+    inner_text(html, lower, "<title", "</title>")
+}
+
+fn extract_h1(html: &str, lower: &str) -> Option<String> {
+    inner_text(html, lower, "<h1", "</h1>").filter(|s| !s.is_empty())
+}
+
+fn inner_text(html: &str, lower: &str, open: &str, close: &str) -> Option<String> {
+    let start = lower.find(open)?;
+    let gt_rel = html.get(start..)?.find('>')?;
+    let after_gt = start + gt_rel + 1;
+    let close_rel = lower.get(after_gt..)?.find(close)?;
+    let end = after_gt + close_rel;
+    let raw = safe_slice(html, after_gt, end)?.trim();
     if raw.is_empty() {
         return None;
     }
-    Some(decode_basic_entities(raw))
+    let stripped = strip_tags(raw);
+    let decoded = decode_basic_entities(&stripped);
+    let decoded = decoded.trim();
+    if decoded.is_empty() {
+        None
+    } else {
+        Some(decoded.to_string())
+    }
+}
+
+fn strip_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out
 }
 
 fn extract_canonical(html: &str, lower: &str) -> Option<String> {
@@ -162,10 +245,10 @@ fn extract_canonical(html: &str, lower: &str) -> Option<String> {
         let abs = search_from + rel_idx;
         let tag_start = lower.get(..abs)?.rfind("<link")?;
         let tag_end_rel = lower.get(tag_start..)?.find('>')?;
-        
-        let tag = html.get(tag_start..tag_start + tag_end_rel)?;
-        let tag_l = lower.get(tag_start..tag_start + tag_end_rel)?;
-        
+        let tag_end = tag_start + tag_end_rel;
+        let tag = safe_slice(html, tag_start, tag_end)?;
+        let tag_l = safe_slice(lower, tag_start, tag_end)?;
+
         if tag_l.contains("rel=") && tag_l.contains("canonical") {
             if let Some(href) = attr_value(tag, "href") {
                 let href = href.trim();
@@ -177,6 +260,63 @@ fn extract_canonical(html: &str, lower: &str) -> Option<String> {
         search_from = abs + 9;
     }
     None
+}
+
+/// UTF-8-safe extraction of `<meta name="{name}" content="...">` (attribute order independent).
+fn extract_meta_content(html: &str, lower: &str, name: &str) -> Option<String> {
+    let mut search_from = 0usize;
+    let needle = format!("name=\"{name}\"");
+    let needle_sq = format!("name='{name}'");
+    while let Some(rel) = lower.get(search_from..)?.find("<meta") {
+        let abs = search_from + rel;
+        let end_rel = lower.get(abs..)?.find('>')?;
+        let tag_end = abs + end_rel;
+        let tag = safe_slice(html, abs, tag_end)?;
+        let tag_l = safe_slice(lower, abs, tag_end)?;
+        if tag_l.contains(&needle) || tag_l.contains(&needle_sq) {
+            if let Some(content) = attr_value(tag, "content") {
+                let content = decode_basic_entities(content.trim());
+                if !content.is_empty() {
+                    return Some(content);
+                }
+            }
+        }
+        search_from = abs + 5;
+    }
+    None
+}
+
+fn extract_hreflang(html: &str, lower: &str) -> Vec<HreflangAlt> {
+    let mut out = Vec::new();
+    let mut search_from = 0usize;
+    while let Some(rel) = lower.get(search_from..).and_then(|s| s.find("<link")) {
+        let abs = search_from + rel;
+        let Some(end_rel) = lower.get(abs..).and_then(|s| s.find('>')) else {
+            break;
+        };
+        let tag_end = abs + end_rel;
+        if let (Some(tag), Some(tag_l)) = (
+            safe_slice(html, abs, tag_end),
+            safe_slice(lower, abs, tag_end),
+        ) {
+            if tag_l.contains("hreflang") {
+                if let (Some(lang), Some(href)) =
+                    (attr_value(tag, "hreflang"), attr_value(tag, "href"))
+                {
+                    let lang = lang.trim();
+                    let href = href.trim();
+                    if !lang.is_empty() && !href.is_empty() {
+                        out.push(HreflangAlt {
+                            lang: lang.to_string(),
+                            href: href.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+        search_from = abs + 5;
+    }
+    out
 }
 
 fn attr_value(tag: &str, name: &str) -> Option<String> {
@@ -191,7 +331,9 @@ fn attr_value(tag: &str, name: &str) -> Option<String> {
         return Some(rest[1..1 + end].to_string());
     }
     // unquoted
-    let end = rest.find(|c: char| c.is_whitespace() || c == '>' || c == '/').unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+        .unwrap_or(rest.len());
     Some(rest[..end].to_string())
 }
 
@@ -302,5 +444,29 @@ mod tests {
         let r = evaluate_page("https://ex.com/this", 200, 8, &headers(), html);
         assert!(r.passed);
         assert!(!r.has_canonical);
+    }
+
+    #[test]
+    fn extract_utf8_meta_and_h1() {
+        let html = r#"<html><head>
+            <title>中文标题 · IndexFlow</title>
+            <meta name="description" content="这是一段 UTF-8 描述 &amp; more">
+            <meta content="index,follow" name="robots">
+            <link rel="alternate" hreflang="zh-CN" href="https://ex.com/zh">
+            <link rel="alternate" href="https://ex.com/en" hreflang="en">
+        </head><body><h1>主标题 <span>副文</span></h1></body></html>"#;
+        let r = evaluate_page("https://ex.com/zh", 200, 12, &headers(), html);
+        assert!(r.passed, "{:?}", r.block_reason);
+        assert_eq!(r.page_title.as_deref(), Some("中文标题 · IndexFlow"));
+        assert_eq!(
+            r.meta_description.as_deref(),
+            Some("这是一段 UTF-8 描述 & more")
+        );
+        assert_eq!(r.h1_content.as_deref(), Some("主标题 副文"));
+        assert_eq!(r.hreflang.len(), 2);
+        assert_eq!(r.hreflang[0].lang, "zh-CN");
+        assert_eq!(r.hreflang[1].lang, "en");
+        assert!(r.robots_directive.as_deref().unwrap().contains("index,follow"));
+        assert!(r.payload_bytes.unwrap() > 0);
     }
 }

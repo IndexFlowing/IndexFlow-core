@@ -76,6 +76,7 @@ pub struct ConfigInfo {
     pub worker_poll_interval_secs: u64,
     pub submit_worker_batch: i64,
     pub google_daily_quota: u32,
+    pub gsc_inspect_daily_quota: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -268,6 +269,7 @@ impl SiteService {
                 worker_poll_interval_secs: self.config.worker_poll_interval_secs,
                 submit_worker_batch: self.config.submit_worker_batch,
                 google_daily_quota: self.config.google_daily_quota,
+                gsc_inspect_daily_quota: self.config.gsc_inspect_daily_quota,
             },
         })
     }
@@ -276,69 +278,52 @@ impl SiteService {
     /// Each engine gets its own independent task so the pipelines run concurrently.
     /// SubmitWorker (legacy SUBMIT_URL) is no longer used for new submissions.
     pub async fn start_submit(&self, site_id: i64) -> anyhow::Result<WorkflowResult> {
-        let site = self
-            .sites
-            .find_by_id(site_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("site not found"))?;
+        let mut parts = Vec::new();
+        let mut total = 0u64;
 
-        if !site.has_any_verified_provider() {
-            if site.has_any_credentials_filled() {
-                anyhow::bail!(
-                    "Credentials are saved but not yet verified. Click Test Bing / Test Google on the site workbench and wait until the channel status is Verified before submitting."
-                );
+        match self.start_submit_bing(site_id).await {
+            Ok(r) => {
+                total += r.tasks_created;
+                if !r.message.is_empty() {
+                    parts.push(format!("Bing: {}", r.message));
+                }
             }
-            anyhow::bail!("Configure and verify an IndexNow key or Google Service Account first");
-        }
-
-        let has_bing = site.bing_ready();
-        // Include Google even when quota-paused — the worker will wait for a slot.
-        let has_google = site.google_verified();
-
-        let mut total_created = 0u64;
-        let mut parts: Vec<String> = Vec::new();
-
-        // --- Bing channel ---
-        if has_bing {
-            let ids = self
-                .urls
-                .list_pending_submit_ids(site_id, true, false, 100_000)
-                .await?;
-            if !ids.is_empty() {
-                let n = self
-                    .tasks
-                    .create_bing_tasks_batch(site_id, &ids, priority::SUBMIT_URL)
-                    .await?;
-                total_created += n;
-                if n > 0 {
-                    parts.push(format!("Bing: created {n} task(s)"));
-                } else {
-                    parts.push(format!("Bing: {} already queued", ids.len()));
+            Err(e) => {
+                let msg = e.to_string();
+                if !msg.contains("not configured") && !msg.contains("not verified") {
+                    return Err(e);
                 }
             }
         }
-
-        // --- Google channel ---
-        if has_google {
-            let ids = self
-                .urls
-                .list_pending_submit_ids(site_id, false, true, 100_000)
-                .await?;
-            if !ids.is_empty() {
-                let n = self
-                    .tasks
-                    .create_google_tasks_batch(site_id, &ids, priority::SUBMIT_URL)
-                    .await?;
-                total_created += n;
-                if n > 0 {
-                    parts.push(format!("Google: created {n} task(s)"));
-                } else {
-                    parts.push(format!("Google: {} already queued", ids.len()));
+        match self.start_submit_google(site_id).await {
+            Ok(r) => {
+                total += r.tasks_created;
+                if !r.message.is_empty() {
+                    parts.push(format!("Google: {}", r.message));
+                }
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                if !msg.contains("not configured") && !msg.contains("not verified") {
+                    return Err(e);
                 }
             }
         }
 
         if parts.is_empty() {
+            let site = self
+                .sites
+                .find_by_id(site_id)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("site not found"))?;
+            if !site.has_any_verified_provider() {
+                if site.has_any_credentials_filled() {
+                    anyhow::bail!(
+                        "Credentials are saved but not yet verified. Click Test Bing / Test Google on the site workbench and wait until the channel status is Verified before submitting."
+                    );
+                }
+                anyhow::bail!("Configure and verify an IndexNow key or Google Service Account first");
+            }
             return Ok(WorkflowResult {
                 success: true,
                 tasks_created: 0,
@@ -348,9 +333,135 @@ impl SiteService {
 
         Ok(WorkflowResult {
             success: true,
-            tasks_created: total_created,
+            tasks_created: total,
             message: parts.join("; "),
         })
+    }
+
+    pub async fn start_submit_bing(&self, site_id: i64) -> anyhow::Result<WorkflowResult> {
+        let site = self
+            .sites
+            .find_by_id(site_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("site not found"))?;
+        if !site.bing_ready() {
+            anyhow::bail!("Bing IndexNow is not configured or not verified");
+        }
+        let ids = self
+            .urls
+            .list_pending_submit_ids(site_id, true, false, 100_000)
+            .await?;
+        if ids.is_empty() {
+            return Ok(WorkflowResult {
+                success: true,
+                tasks_created: 0,
+                message: "No URLs pending Bing submission".into(),
+            });
+        }
+        let n = self
+            .tasks
+            .create_bing_tasks_batch(site_id, &ids, priority::SUBMIT_URL)
+            .await?;
+        Ok(WorkflowResult {
+            success: true,
+            tasks_created: n,
+            message: if n > 0 {
+                format!("queued {n} Bing task(s)")
+            } else {
+                format!("{} already queued", ids.len())
+            },
+        })
+    }
+
+    pub async fn start_submit_google(&self, site_id: i64) -> anyhow::Result<WorkflowResult> {
+        let site = self
+            .sites
+            .find_by_id(site_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("site not found"))?;
+        if !site.google_verified() {
+            anyhow::bail!("Google Indexing API is not configured or not verified");
+        }
+        // INDEXED (GSC exemption) is already excluded in list_pending_submit_ids.
+        let ids = self
+            .urls
+            .list_pending_submit_ids(site_id, false, true, 100_000)
+            .await?;
+        if ids.is_empty() {
+            return Ok(WorkflowResult {
+                success: true,
+                tasks_created: 0,
+                message: "No URLs pending Google submission (INDEXED pages are exempt)".into(),
+            });
+        }
+        let n = self
+            .tasks
+            .create_google_tasks_batch(site_id, &ids, priority::SUBMIT_URL)
+            .await?;
+        Ok(WorkflowResult {
+            success: true,
+            tasks_created: n,
+            message: if n > 0 {
+                format!("queued {n} Google task(s)")
+            } else {
+                format!("{} already queued", ids.len())
+            },
+        })
+    }
+
+    /// Standalone SEO quality-gate scan. Does not enqueue submit workers.
+    pub async fn start_seo_audit(
+        &self,
+        site_id: i64,
+        unchecked_only: bool,
+    ) -> anyhow::Result<WorkflowResult> {
+        let _site = self
+            .sites
+            .find_by_id(site_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("site not found"))?;
+        let ids = self
+            .urls
+            .list_seo_audit_ids(site_id, unchecked_only, 100_000)
+            .await?;
+        if ids.is_empty() {
+            return Ok(WorkflowResult {
+                success: true,
+                tasks_created: 0,
+                message: if unchecked_only {
+                    "No unchecked URLs remaining".into()
+                } else {
+                    "No URLs to audit — sync the sitemap first".into()
+                },
+            });
+        }
+        let n = self
+            .tasks
+            .create_check_tasks_batch(site_id, &ids, priority::CHECK_URL)
+            .await?;
+        Ok(WorkflowResult {
+            success: true,
+            tasks_created: n,
+            message: if unchecked_only {
+                format!("Queued {n} unchecked URL(s) for SEO audit")
+            } else {
+                format!("Queued {n} URL(s) for full SEO audit")
+            },
+        })
+    }
+
+    pub async fn seo_stats(&self, site_id: i64) -> anyhow::Result<serde_json::Value> {
+        let stats = self.urls.seo_stats(site_id).await?;
+        let http = self.urls.http_status_breakdown(site_id).await?;
+        let reasons = self.urls.block_reason_breakdown(site_id).await?;
+        Ok(serde_json::json!({
+            "site_id": stats.site_id,
+            "checked": stats.checked,
+            "unchecked": stats.unchecked,
+            "blocked": stats.blocked,
+            "http_status": http,
+            "block_reasons": reasons,
+        }))
     }
 
     pub async fn test_bing(&self, site_id: i64) -> anyhow::Result<ChannelTestResult> {
@@ -547,11 +658,19 @@ fn build_activity(rows: &[TaskQueueCount]) -> SiteActivity {
     let mut sync_processing = 0i64;
     let mut submit_pending = 0i64;
     let mut submit_processing = 0i64;
+    let mut seo_pending = 0i64;
+    let mut seo_processing = 0i64;
+    let mut inspect_pending = 0i64;
+    let mut inspect_processing = 0i64;
 
     for r in rows {
         match (r.task_type.as_str(), r.status.as_str()) {
             ("SYNC_SITEMAP", "PENDING") => sync_pending += r.count,
             ("SYNC_SITEMAP", "PROCESSING") => sync_processing += r.count,
+            ("CHECK_URL", "PENDING") => seo_pending += r.count,
+            ("CHECK_URL", "PROCESSING") => seo_processing += r.count,
+            ("GSC_INSPECT", "PENDING") => inspect_pending += r.count,
+            ("GSC_INSPECT", "PROCESSING") => inspect_processing += r.count,
             (
                 "SUBMIT_URL" | "SUBMIT_BING" | "SUBMIT_GOOGLE" | "RETRY_SUBMISSION",
                 "PENDING",
@@ -566,32 +685,39 @@ fn build_activity(rows: &[TaskQueueCount]) -> SiteActivity {
 
     let syncing = sync_pending + sync_processing > 0;
     let submitting = submit_pending + submit_processing > 0;
-    let running = syncing || submitting;
+    let auditing = seo_pending + seo_processing > 0;
+    let inspecting = inspect_pending + inspect_processing > 0;
+    let running = syncing || submitting || auditing || inspecting;
 
-    let (phase, label) = match (syncing, submitting) {
-        (true, true) => (
-            "sync_and_submit".to_string(),
-            format!(
-                "Syncing sitemap and submitting URLs (Queue {} · Running {})",
-                submit_pending, submit_processing
-            ),
-        ),
-        (true, false) => (
-            "syncing".to_string(),
-            if sync_processing > 0 {
-                "Syncing sitemap".to_string()
+    let (phase, label) = if running {
+        let mut bits = Vec::new();
+        if syncing {
+            bits.push("sitemap sync");
+        }
+        if auditing {
+            bits.push("SEO audit");
+        }
+        if submitting {
+            bits.push("engine submit");
+        }
+        if inspecting {
+            bits.push("GSC inspect");
+        }
+        (
+            if submitting {
+                "submitting"
+            } else if auditing {
+                "seo"
+            } else if inspecting {
+                "inspect"
             } else {
-                "Sitemap sync queued".to_string()
-            },
-        ),
-        (false, true) => (
-            "submitting".to_string(),
-            format!(
-                "Inspecting SEO & submitting URLs (Queue {} · Running {})",
-                submit_pending, submit_processing
-            ),
-        ),
-        (false, false) => ("idle".to_string(), "No active tasks running".to_string()),
+                "syncing"
+            }
+            .to_string(),
+            format!("Running: {}", bits.join(" · ")),
+        )
+    } else {
+        ("idle".to_string(), "No active tasks running".to_string())
     };
 
     SiteActivity {

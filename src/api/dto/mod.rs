@@ -37,6 +37,14 @@ pub struct ListQuery {
     pub path_prefix: Option<String>,
     pub page: Option<i64>,
     pub limit: Option<i64>,
+    /// `true` = last_checked_at IS NOT NULL; `false` = never scanned.
+    pub seo_checked: Option<bool>,
+    pub google_index_status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubmitNowRequest {
+    pub provider: String,
 }
 
 #[derive(Debug, Deserialize)]

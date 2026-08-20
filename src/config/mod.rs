@@ -25,6 +25,9 @@ pub struct AppConfig {
     /// Google Indexing API daily quota (UTC day). Default 200.
     pub google_daily_quota: u32,
 
+    /// GSC URL Inspection API rolling 24h quota. Default 2000.
+    pub gsc_inspect_daily_quota: u32,
+
     /// JWT signing secret for admin sessions.
     pub jwt_secret: String,
     /// JWT expiry hours. Default 168 (7 days).
@@ -55,6 +58,7 @@ impl AppConfig {
             submit_worker_batch: env_i64("SUBMIT_WORKER_BATCH", 10),
             max_task_retries: env_i64("MAX_TASK_RETRIES", 5) as i32,
             google_daily_quota: env_u64("GOOGLE_DAILY_QUOTA", 200) as u32,
+            gsc_inspect_daily_quota: env_u64("GSC_INSPECT_DAILY_QUOTA", 2000) as u32,
             jwt_secret: env::var("JWT_SECRET")
                 .or_else(|_| env::var("API_SECRET_KEY"))
                 .unwrap_or_else(|_| "indexflow-dev-secret-change-me".into()),

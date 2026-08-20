@@ -14,18 +14,18 @@ const SLIDES = [
   },
   {
     image: "/carousel/slide-health.jpg",
-    title: "Inline SEO quality gate",
-    desc: "HTTP status, noindex, and canonical at a glance. Block reasons are traceable; inspection runs immediately before submit.",
+    title: "Standalone SEO quality gate",
+    desc: "HTTP 200, title, description, canonical, robots, and H1. Run a full audit or unchecked-only scan without submitting.",
   },
   {
     image: "/carousel/slide-pipeline.jpg",
-    title: "On-demand task pipelines",
-    desc: "Sync, inspect, and submit are triggered separately. Priority combines sitemap priority, lastmod, and newly discovered URLs.",
+    title: "Four decoupled workspaces",
+    desc: "Sitemap assets, SEO inspection, engine push, and GSC index monitoring are independent workflows on one site header.",
   },
   {
     image: "/carousel/slide-channels.jpg",
-    title: "Google / Bing channels & quota",
-    desc: "Credentials are saved and verified separately. IndexNow submits at full speed; Google sleeps when the rolling 24-hour quota is exhausted.",
+    title: "Bing / Google push & GSC exemption",
+    desc: "IndexNow batches at full speed. Google uses a rolling 24-hour quota. Ranking URLs harvested from GSC skip that quota.",
   },
 ];
 

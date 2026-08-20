@@ -6,7 +6,7 @@ pub mod dashboard;
 pub mod auth;
 
 use crate::application::{
-    AuthService, SiteService, SitemapService, TaskService, UrlService,
+    AuthService, GscService, SiteService, SitemapService, TaskService, UrlService,
 };
 use axum::{http::StatusCode, Json};
 use std::sync::Arc;
@@ -18,6 +18,7 @@ pub struct AppState {
     pub url_service: Arc<UrlService>,
     pub task_service: Arc<TaskService>,
     pub auth_service: Arc<AuthService>,
+    pub gsc_service: Arc<GscService>,
 }
 
 pub async fn health_check() -> (StatusCode, Json<serde_json::Value>) {

@@ -1,9 +1,12 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::time::Duration;
 use tracing::info;
 
 pub async fn connect(database_url: &str, max_connections: u32) -> anyhow::Result<PgPool> {
     let pool = PgPoolOptions::new()
         .max_connections(max_connections)
+        .acquire_timeout(Duration::from_secs(8))
+        .idle_timeout(Duration::from_secs(60))
         .connect(database_url)
         .await?;
 

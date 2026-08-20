@@ -1,8 +1,8 @@
 use crate::application::{HealthService, SubmissionService};
 use crate::config::AppConfig;
 use crate::domain::{
-    engine_is_submitted, engine_needs_submit, fair_site_plan, resolve_lifecycle_after_submit,
-    ProviderKind, Site, TaskType, Url, UrlStatus,
+    engine_is_submitted, engine_needs_submit, fair_site_plan, google_is_indexed,
+    resolve_lifecycle_after_submit, ProviderKind, Site, TaskType, Url, UrlStatus,
 };
 use crate::infrastructure::{
     GoogleQuotaWindow, HealthCheckRepo, SiteRepo, SubmissionLogRepo, TaskRepo, UrlRepo,
@@ -259,6 +259,30 @@ impl GoogleSubmitWorker {
                 continue;
             };
 
+            if google_is_indexed(&url.google_index_status) {
+                // GSC Search Analytics already confirmed INDEXED — skip Indexing API quota.
+                let overall = resolve_lifecycle_after_submit(
+                    site.bing_ready(),
+                    true,
+                    &url.bing_status,
+                    "SUBMITTED",
+                );
+                self.urls
+                    .apply_submit_outcome(
+                        url.id,
+                        overall,
+                        None,
+                        None,
+                        None,
+                        Some("SUBMITTED"),
+                        None,
+                    )
+                    .await?;
+                self.tasks.mark_success(task.id).await?;
+                info!(url_id = url.id, "google exempt (GSC INDEXED)");
+                continue;
+            }
+
             if !engine_needs_submit(&url.google_status) {
                 // Already submitted on Google.
                 self.finalize_already_done(&site, &task, &url).await?;
@@ -410,30 +434,16 @@ impl GoogleSubmitWorker {
         let result = self.health.check_url(&url.url).await;
 
         self.health_repo
-            .insert(
-                url.id,
-                result.http_status,
-                result.response_time_ms,
-                result.has_noindex,
-                result.has_canonical,
-            )
+            .insert_from_gate(url.id, &result)
             .await?;
 
-        self.urls
-            .apply_gate_result(
-                url.id,
-                result.http_status,
-                result.page_title.as_deref(),
-                result.canonical_url.as_deref(),
-            )
-            .await?;
+        self.urls.persist_seo_scan(url.id, &result).await?;
 
         if !result.passed {
             let reason = result
                 .block_reason
                 .unwrap_or_else(|| "quality gate failed".into());
             info!(url_id = url.id, url = %url.url, %reason, "blocked by quality gate");
-            self.urls.mark_blocked(url.id, &reason).await?;
             self.tasks.mark_success(task.id).await?;
             return Ok(false);
         }

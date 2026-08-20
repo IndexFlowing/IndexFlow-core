@@ -10,8 +10,8 @@ mod workers;
 use crate::api::handlers::AppState;
 use crate::api::routes::build_router;
 use crate::application::{
-    AuthService, HealthService, SiteService, SitemapService, SubmissionService, TaskService,
-    UrlService,
+    AuthService, GscService, HealthService, SiteService, SitemapService, SubmissionService,
+    TaskService, UrlService,
 };
 use crate::config::AppConfig;
 use crate::infrastructure::{
@@ -20,7 +20,9 @@ use crate::infrastructure::{
 };
 use crate::providers::{bing::BingProvider, google::GoogleProvider};
 use crate::scheduler::Scheduler;
-use crate::workers::{BingSubmitWorker, GoogleSubmitWorker, SyncWorker};
+use crate::workers::{
+    BingSubmitWorker, GoogleSubmitWorker, GscInspectWorker, SeoAuditWorker, SyncWorker,
+};
 use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -74,15 +76,26 @@ async fn main() -> anyhow::Result<()> {
         site_repo.clone(),
         task_repo.clone(),
     );
+    let health_service = HealthService::new(http.clone());
+    let submission_service =
+        SubmissionService::new(bing_provider.clone(), google_provider.clone());
     let url_service = Arc::new(UrlService::new(
         url_repo.clone(),
         health_repo.clone(),
         submission_log_repo.clone(),
+        site_repo.clone(),
+        health_service.clone(),
+        submission_service.clone(),
+        config.clone(),
     ));
     let task_service = Arc::new(TaskService::new(task_repo.clone()));
-    let health_service = HealthService::new(http.clone());
-    let submission_service =
-        SubmissionService::new(bing_provider, google_provider);
+    let gsc_service = GscService::new(
+        google_provider.clone(),
+        site_repo.clone(),
+        url_repo.clone(),
+        task_repo.clone(),
+        config.clone(),
+    );
 
     // Scheduler
     let scheduler = Arc::new(Scheduler::new(
@@ -124,8 +137,28 @@ async fn main() -> anyhow::Result<()> {
         site_repo.clone(),
         submission_log_repo.clone(),
         health_repo.clone(),
-        health_service,
+        health_service.clone(),
         submission_service,
+        config.clone(),
+    ))
+    .start();
+
+    // Module 2: standalone SEO quality scanner (does not enqueue submit work).
+    Arc::new(SeoAuditWorker::new(
+        task_repo.clone(),
+        url_repo.clone(),
+        health_repo.clone(),
+        health_service,
+        config.clone(),
+    ))
+    .start();
+
+    // Module 4 layer 2: GSC URL Inspection API (2,000/day).
+    Arc::new(GscInspectWorker::new(
+        task_repo.clone(),
+        url_repo.clone(),
+        site_repo.clone(),
+        gsc_service.clone(),
         config.clone(),
     ))
     .start();
@@ -137,6 +170,7 @@ async fn main() -> anyhow::Result<()> {
         url_service,
         task_service,
         auth_service,
+        gsc_service: Arc::new(gsc_service),
     };
 
     let app = build_router(state);

@@ -7,5 +7,5 @@ pub use repository::*;
 pub use http_client::*;
 // re-export diagnostic / facet row types for application layer
 pub use repository::url_repo::{
-    LocaleCount, PathPrefixCount, SiteUrlStats, UrlDiagnostic,
+    IndexFunnelStats, LocaleCount, PathPrefixCount, SiteUrlStats, UrlDiagnostic,
 };

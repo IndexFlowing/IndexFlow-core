@@ -146,6 +146,103 @@ pub async fn test_bing(
     }
 }
 
+pub async fn start_submit_bing(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.site_service.start_submit_bing(id).await {
+        Ok(r) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+pub async fn start_submit_google(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.site_service.start_submit_google(id).await {
+        Ok(r) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+pub async fn seo_audit_full(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.site_service.start_seo_audit(id, false).await {
+        Ok(r) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+pub async fn seo_audit_unchecked(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.site_service.start_seo_audit(id, true).await {
+        Ok(r) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+pub async fn seo_stats(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.site_service.seo_stats(id).await {
+        Ok(v) => Ok((StatusCode::OK, Json(v))),
+        Err(e) => Err(internal_err(e)),
+    }
+}
+
+pub async fn gsc_sync_analytics(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.gsc_service.sync_analytics(id).await {
+        Ok(r) => Ok((StatusCode::OK, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+pub async fn gsc_inspect_batch(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.gsc_service.enqueue_inspect_batch(id).await {
+        Ok(r) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+pub async fn index_stats(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    match state.gsc_service.monitor_stats(id).await {
+        Ok(r) => Ok((StatusCode::OK, Json(serde_json::json!(r)))),
+        Err(e) => map_site_err(e),
+    }
+}
+
+fn map_site_err(e: anyhow::Error) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    let msg = e.to_string();
+    if msg.contains("not found") {
+        Err(not_found(&msg))
+    } else if msg.contains("not yet verified")
+        || msg.contains("Configure")
+        || msg.contains("not configured")
+        || msg.contains("not verified")
+        || msg.contains("Search Console")
+        || msg.contains("quota")
+    {
+        Err(bad_request(&msg))
+    } else {
+        Err(internal_err(e))
+    }
+}
+
 pub async fn test_google(
     State(state): State<AppState>,
     Path(id): Path<i64>,
