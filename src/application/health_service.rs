@@ -14,14 +14,14 @@ pub struct HealthService {
 }
 
 impl HealthService {
-    pub fn new(_shared: Client) -> Self {
+    pub fn new(_shared: Client) -> anyhow::Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(15))
             .user_agent(INTERNAL_CRAWLER_UA)
             .redirect(Policy::none())
             .build()
-            .expect("failed to build quality-gate HTTP client");
-        Self { client }
+            .map_err(|e| anyhow::anyhow!("failed to build quality-gate HTTP client: {e}"))?;
+        Ok(Self { client })
     }
 
     pub async fn check_url(&self, url: &str) -> QualityGateResult {

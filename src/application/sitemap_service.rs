@@ -252,7 +252,10 @@ pub fn parse_sitemap_xml(xml: &str) -> ParsedSitemap {
                 }
             }
             Ok(Event::Eof) => break,
-            Err(_) => break,
+            Err(e) => {
+                tracing::warn!(error = %e, "sitemap XML parse error — returning partial result");
+                break;
+            }
             _ => {}
         }
         buf.clear();

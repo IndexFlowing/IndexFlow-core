@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = connect(&config.database_url, config.db_max_connections).await?;
     migrate(&pool).await?;
 
-    let http = build_http_client();
+    let http = build_http_client()?;
 
     // Repositories
     let site_repo = SiteRepo::new(pool.clone());
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
         site_repo.clone(),
         task_repo.clone(),
     );
-    let health_service = HealthService::new(http.clone());
+    let health_service = HealthService::new(http.clone())?;
     let submission_service =
         SubmissionService::new(bing_provider.clone(), google_provider.clone());
     let url_service = Arc::new(UrlService::new(

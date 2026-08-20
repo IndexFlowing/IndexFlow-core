@@ -175,23 +175,19 @@ impl GoogleQuotaWindow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
 
     #[test]
     fn rolling_window_next_free_is_oldest_plus_24h() {
-        let oldest = Utc.with_ymd_and_hms(2026, 8, 16, 8, 0, 0).unwrap();
+        let oldest = Utc::now() - Duration::hours(2);
         let q = GoogleQuotaWindow::new(1, 200, 200, Some(oldest));
         assert!(q.exhausted());
         assert_eq!(q.remaining, 0);
-        assert_eq!(
-            q.next_free_at,
-            Some(Utc.with_ymd_and_hms(2026, 8, 17, 8, 0, 0).unwrap())
-        );
+        assert_eq!(q.next_free_at, Some(oldest + Duration::hours(24)));
     }
 
     #[test]
     fn unused_quota_has_no_next_free() {
-        let oldest = Utc.with_ymd_and_hms(2026, 8, 16, 8, 0, 0).unwrap();
+        let oldest = Utc::now() - Duration::hours(1);
         let q = GoogleQuotaWindow::new(1, 12, 200, Some(oldest));
         assert!(!q.exhausted());
         assert_eq!(q.remaining, 188);
@@ -205,5 +201,13 @@ mod tests {
         assert!(a.exhausted());
         assert!(!b.exhausted());
         assert_eq!(b.remaining, 197);
+    }
+
+    #[test]
+    fn exhausted_without_oldest_yields_none_next_free() {
+        // Edge: exhausted but oldest is None (e.g. no recent logs yet counted externally).
+        let q = GoogleQuotaWindow::new(1, 200, 200, None);
+        assert!(q.exhausted());
+        assert!(q.next_free_at.is_none());
     }
 }
