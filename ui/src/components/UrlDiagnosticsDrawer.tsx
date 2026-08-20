@@ -21,12 +21,16 @@ import {
 } from "@/lib/api";
 import { formatBytes, formatDate } from "@/lib/utils";
 
+export type DrawerMode = "full" | "source" | "seo" | "bing" | "google" | "gsc";
+
 export function UrlDiagnosticsDrawer({
   url,
+  mode = "full",
   onClose,
   onUpdated,
 }: {
   url: UrlDiagnostic;
+  mode?: DrawerMode;
   onClose: () => void;
   onUpdated: () => void;
 }) {
@@ -145,45 +149,51 @@ export function UrlDiagnosticsDrawer({
           </div>
 
           <div className="flex flex-wrap gap-2 mt-4">
-            <button
-              type="button"
-              disabled={!!busy}
-              onClick={recheck}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 disabled:opacity-50"
-            >
-              {busy === "recheck" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-              Re-check SEO Now
-            </button>
-            <button
-              type="button"
-              disabled={!!busy || status === "BLOCKED"}
-              onClick={() => submit("bing")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-950/70 border border-sky-800/60 text-sky-200 disabled:opacity-50"
-            >
-              {busy === "bing" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Send className="w-3.5 h-3.5" />
-              )}
-              Submit to Bing Now
-            </button>
-            <button
-              type="button"
-              disabled={!!busy || status === "BLOCKED"}
-              onClick={() => submit("google")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-950/70 border border-indigo-800/60 text-indigo-200 disabled:opacity-50"
-            >
-              {busy === "google" ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Globe className="w-3.5 h-3.5" />
-              )}
-              Submit to Google Now
-            </button>
+            {mode !== "gsc" && (
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={recheck}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 disabled:opacity-50"
+              >
+                {busy === "recheck" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                Re-check SEO Now
+              </button>
+            )}
+            {(mode === "full" || mode === "bing") && (
+              <button
+                type="button"
+                disabled={!!busy || status === "BLOCKED"}
+                onClick={() => submit("bing")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-950/70 border border-sky-800/60 text-sky-200 disabled:opacity-50"
+              >
+                {busy === "bing" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                Submit to Bing Now
+              </button>
+            )}
+            {(mode === "full" || mode === "google") && (
+              <button
+                type="button"
+                disabled={!!busy || status === "BLOCKED"}
+                onClick={() => submit("google")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-950/70 border border-indigo-800/60 text-indigo-200 disabled:opacity-50"
+              >
+                {busy === "google" ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Globe className="w-3.5 h-3.5" />
+                )}
+                Submit to Google Now
+              </button>
+            )}
           </div>
         </header>
 
@@ -207,161 +217,171 @@ export function UrlDiagnosticsDrawer({
 
           {signals && (
             <>
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-                <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
-                  Meta tags
-                </h3>
-                <SignalRow
-                  label={`<title> · ${signals.title_chars} chars`}
-                  value={signals.title}
-                  warn={signals.title_chars === 0 || signals.title_chars > 60}
-                />
-                <SignalRow
-                  label={`<meta name="description"> · ${signals.meta_description_chars} chars`}
-                  value={signals.meta_description}
-                  warn={
-                    signals.meta_description_chars === 0 ||
-                    signals.meta_description_chars > 160
-                  }
-                />
-                <SignalRow label="<h1>" value={signals.h1} />
-              </section>
+              {(mode === "full" || mode === "source" || mode === "seo") && (
+                <>
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+                    <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+                      Meta tags
+                    </h3>
+                    <SignalRow
+                      label={`<title> · ${signals.title_chars} chars`}
+                      value={signals.title}
+                      warn={signals.title_chars === 0 || signals.title_chars > 60}
+                    />
+                    <SignalRow
+                      label={`<meta name="description"> · ${signals.meta_description_chars} chars`}
+                      value={signals.meta_description}
+                      warn={
+                        signals.meta_description_chars === 0 ||
+                        signals.meta_description_chars > 160
+                      }
+                    />
+                    <SignalRow label="<h1>" value={signals.h1} />
+                  </section>
 
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-                <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
-                  Directives & signals
-                </h3>
-                <SignalRow
-                  label="<link rel=&quot;canonical&quot;>"
-                  value={signals.canonical_url}
-                  extra={
-                    signals.canonical_matches == null
-                      ? "No canonical declared"
-                      : signals.canonical_matches
-                        ? "Matches page URL"
-                        : "Mismatch"
-                  }
-                  warn={signals.canonical_matches === false}
-                />
-                <SignalRow label="robots" value={signals.robots} />
-                {signals.hreflang.length > 0 ? (
-                  <div className="mt-2 space-y-1">
-                    <div className="text-[11px] text-slate-500">hreflang alternates</div>
-                    {signals.hreflang.map((h, i) => (
-                      <div key={`${h.lang}-${i}`} className="text-xs text-slate-300 font-mono break-all">
-                        {h.lang}: {h.href}
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+                    <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+                      Directives & signals
+                    </h3>
+                    <SignalRow
+                      label="<link rel=&quot;canonical&quot;>"
+                      value={signals.canonical_url}
+                      extra={
+                        signals.canonical_matches == null
+                          ? "No canonical declared"
+                          : signals.canonical_matches
+                            ? "Matches page URL"
+                            : "Mismatch"
+                      }
+                      warn={signals.canonical_matches === false}
+                    />
+                    <SignalRow label="robots" value={signals.robots} />
+                    {signals.hreflang.length > 0 ? (
+                      <div className="mt-2 space-y-1">
+                        <div className="text-[11px] text-slate-500">hreflang alternates</div>
+                        {signals.hreflang.map((h, i) => (
+                          <div key={`${h.lang}-${i}`} className="text-xs text-slate-300 font-mono break-all">
+                            {h.lang}: {h.href}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <SignalRow label="hreflang" value="—" />
-                )}
-              </section>
+                    ) : (
+                      <SignalRow label="hreflang" value="—" />
+                    )}
+                  </section>
 
-              <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-                <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
-                  Network & timing
-                </h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <MiniStat
-                    label="HTTP"
-                    value={signals.http_status != null ? String(signals.http_status) : "—"}
-                    ok={signals.http_status === 200}
-                  />
-                  <MiniStat
-                    label="Latency"
-                    value={
-                      signals.response_time_ms != null
-                        ? `${signals.response_time_ms} ms`
-                        : "—"
-                    }
-                  />
-                  <MiniStat
-                    label="Payload"
-                    value={formatBytes(signals.payload_bytes)}
-                  />
-                </div>
-              </section>
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+                    <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+                      Network & timing
+                    </h3>
+                    <div className="grid grid-cols-3 gap-3">
+                      <MiniStat
+                        label="HTTP"
+                        value={signals.http_status != null ? String(signals.http_status) : "—"}
+                        ok={signals.http_status === 200}
+                      />
+                      <MiniStat
+                        label="Latency"
+                        value={
+                          signals.response_time_ms != null
+                            ? `${signals.response_time_ms} ms`
+                            : "—"
+                        }
+                      />
+                      <MiniStat
+                        label="Payload"
+                        value={formatBytes(signals.payload_bytes)}
+                      />
+                    </div>
+                  </section>
+                </>
+              )}
+              {mode === "source" && (
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+                  <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">Source</h3>
+                  <SignalRow label="URL" value={pageUrl} />
+                  <SignalRow label="Locale" value={u?.locale ?? url.locale} />
+                  <SignalRow label="Path prefix" value={u?.path_prefix ?? url.path_prefix} />
+                </section>
+              )}
             </>
           )}
 
           {analysis && (
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-              <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
-                Submission & GSC trail
-              </h3>
-              <div className="flex flex-wrap gap-2 mb-3">
-                <StatusBadge status={analysis.gsc.index_status || "UNKNOWN"} />
-                <span className="text-[11px] text-slate-500 inline-flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Last crawl {formatDate(analysis.gsc.last_crawled_at)}
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Inspected {formatDate(analysis.gsc.inspected_at)}
-                </span>
-              </div>
-              {analysis.gsc.coverage_state && (
-                <p className="text-xs text-slate-300 mb-3">
-                  coverageState: {analysis.gsc.coverage_state}
-                </p>
+            <>
+              {(mode === "full" || mode === "gsc" || mode === "bing" || mode === "google") && (
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+                  <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+                    Submission & GSC trail
+                  </h3>
+                  {(mode === "full" || mode === "gsc") && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <StatusBadge status={analysis.gsc.index_status || "UNKNOWN"} />
+                      <span className="text-[11px] text-slate-500 inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Last crawl {formatDate(analysis.gsc.last_crawled_at)}
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Inspected {formatDate(analysis.gsc.inspected_at)}
+                      </span>
+                    </div>
+                  )}
+                  {analysis.gsc.coverage_state && (mode === "full" || mode === "gsc") && (
+                    <p className="text-xs text-slate-300 mb-3">coverageState: {analysis.gsc.coverage_state}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                    {(mode === "full" || mode === "bing" || mode === "gsc") && (
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+                        <div className="text-slate-500">Bing submit</div>
+                        <div className="text-slate-200 mt-0.5">{u?.bing_status || "NONE"}</div>
+                        {u?.bing_error && <div className="text-rose-400 mt-1 break-all">{u.bing_error}</div>}
+                      </div>
+                    )}
+                    {(mode === "full" || mode === "google" || mode === "gsc") && (
+                      <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+                        <div className="text-slate-500">Google submit</div>
+                        <div className="text-slate-200 mt-0.5">{u?.google_status || "NONE"}</div>
+                        {u?.google_error && <div className="text-rose-400 mt-1 break-all">{u.google_error}</div>}
+                      </div>
+                    )}
+                  </div>
+                </section>
               )}
-              <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">
-                  <div className="text-slate-500">Bing submit</div>
-                  <div className="text-slate-200 mt-0.5">{u?.bing_status || "NONE"}</div>
-                  {u?.bing_error && (
-                    <div className="text-rose-400 mt-1 break-all">{u.bing_error}</div>
-                  )}
-                </div>
-                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-2">
-                  <div className="text-slate-500">Google submit</div>
-                  <div className="text-slate-200 mt-0.5">{u?.google_status || "NONE"}</div>
-                  {u?.google_error && (
-                    <div className="text-rose-400 mt-1 break-all">{u.google_error}</div>
-                  )}
-                </div>
-              </div>
-
-              {lastRecheck && (
+              {(mode === "full" || mode === "seo" || mode === "bing" || mode === "google") && lastRecheck && (
                 <LiveBox
                   title="Last re-check"
                   ok={lastRecheck.passed}
                   body={`${lastRecheck.gate.http_status ?? "—"} in ${lastRecheck.gate.response_time_ms ?? "—"}ms · ${lastRecheck.block_reason || "passed"}`}
                 />
               )}
-              {lastSubmit && (
-                <LiveBox
-                  title={`Last ${lastSubmit.provider} submit`}
-                  ok={lastSubmit.success}
-                  body={lastSubmit.response_body || lastSubmit.message}
-                />
+              {(mode === "full" || mode === "bing" || mode === "google" || mode === "gsc") && lastSubmit && (
+                <LiveBox title={`Last ${lastSubmit.provider} submit`} ok={lastSubmit.success} body={lastSubmit.response_body || lastSubmit.message} />
               )}
-
-              {(analysis.recent_submissions?.length ?? 0) > 0 && (
+              {(mode === "full" || mode === "bing" || mode === "google") && (analysis.recent_submissions?.length ?? 0) > 0 && (
                 <div className="mt-3 space-y-2">
-                  {analysis.recent_submissions.slice(0, 5).map((s) => (
-                    <div
-                      key={s.id}
-                      className="p-2 rounded-lg bg-slate-950/50 border border-slate-800 text-[11px]"
-                    >
-                      <div className="flex justify-between">
-                        <span className="uppercase text-slate-300">{s.provider}</span>
-                        <span className={s.success ? "text-emerald-400" : "text-rose-400"}>
-                          {s.success ? "OK" : "Failed"}
-                          {s.response_code != null ? ` (${s.response_code})` : ""}
-                        </span>
+                  {analysis.recent_submissions
+                    .filter((s) => mode === "full" || s.provider.toLowerCase() === mode)
+                    .slice(0, 5)
+                    .map((s) => (
+                      <div key={s.id} className="p-2 rounded-lg bg-slate-950/50 border border-slate-800 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="uppercase text-slate-300">{s.provider}</span>
+                          <span className={s.success ? "text-emerald-400" : "text-rose-400"}>
+                            {s.success ? "OK" : "Failed"}
+                            {s.response_code != null ? ` (${s.response_code})` : ""}
+                          </span>
+                        </div>
+                        {s.response_body && (
+                          <pre className="mt-1 text-slate-500 whitespace-pre-wrap break-all max-h-20 overflow-auto">
+                            {s.response_body.slice(0, 800)}
+                          </pre>
+                        )}
+                        <div className="text-slate-600 mt-1">{formatDate(s.created_at)}</div>
                       </div>
-                      {s.response_body && (
-                        <pre className="mt-1 text-slate-500 whitespace-pre-wrap break-all max-h-20 overflow-auto">
-                          {s.response_body.slice(0, 800)}
-                        </pre>
-                      )}
-                      <div className="text-slate-600 mt-1">{formatDate(s.created_at)}</div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
-            </section>
+            </>
           )}
         </div>
       </aside>

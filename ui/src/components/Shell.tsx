@@ -11,9 +11,11 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { AuthGuard } from "@/components/AuthGuard";
+import { SiteSwitcher } from "@/components/SiteSwitcher";
 import { clearSession, getUsername } from "@/lib/auth";
+import { api, SiteWorkbenchSummary } from "@/lib/api";
 
 const nav = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -26,15 +28,30 @@ export function Shell({
   title,
   subtitle,
   actions,
+  hideSiteSwitcher,
 }: {
   children: ReactNode;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  hideSiteSwitcher?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const username = getUsername();
+  const [sites, setSites] = useState<SiteWorkbenchSummary[]>([]);
+  const selectedId = (() => {
+    const m = pathname.match(/^\/site\/(\d+)/);
+    return m ? Number(m[1]) : null;
+  })();
+
+  useEffect(() => {
+    if (hideSiteSwitcher) return;
+    api
+      .dashboard()
+      .then((d) => setSites(d.sites ?? []))
+      .catch(() => {});
+  }, [hideSiteSwitcher, pathname]);
 
   const logout = () => {
     clearSession();
@@ -58,6 +75,7 @@ export function Shell({
               </div>
             </div>
           </div>
+          {!hideSiteSwitcher && <SiteSwitcher sites={sites} selectedId={selectedId} />}
           <nav className="flex-1 p-3 space-y-1">
             {nav.map((item) => {
               const active =
