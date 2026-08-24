@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t.nav_dashboard }} - IndexFlow{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-white tracking-tight flex items-center gap-3">
+                {{ domain }}
+                {% if bing_ready %}
+                <span class="text-xs px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Bing Verified</span>
+                {% endif %}
+                {% if google_ready %}
+                <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Google Verified</span>
+                {% endif %}
+            </h2>
+            <p class="text-sm text-slate-400 mt-1">Sitemap: <span class="font-mono text-slate-300">{{ sitemap_url }}</span></p>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- 1. 同步 Sitemap -->
+            <button hx-post="/api/v1/actions/sync-sitemap" 
+                    hx-swap="none"
+                    hx-on::before-request="this.disabled = true; this.classList.add('opacity-50')"
+                    hx-on::after-request="this.disabled = false; this.classList.remove('opacity-50'); showToast('已触发 Sitemap 同步任务...'); htmx.trigger('#dashboard-stats', 'refresh'); htmx.trigger('#recent-table', 'refresh')"
+                    class="px-3.5 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 shadow-sm transition active:scale-95 flex items-center gap-2">
+                <span>🔄</span> {{ t.btn_sync_sitemap }}
+            </button>
+
+            <!-- 2. GSC 收录检测 -->
+            <button hx-post="/api/v1/actions/inspect-gsc" 
+                    hx-swap="none"
+                    hx-on::before-request="this.disabled = true; this.classList.add('opacity-50')"
+                    hx-on::after-request="this.disabled = false; this.classList.remove('opacity-50'); showToast('已启动 GSC 收录检测任务...'); htmx.trigger('#dashboard-stats', 'refresh'); htmx.trigger('#recent-table', 'refresh')"
+                    class="px-3.5 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 shadow-sm transition active:scale-95 flex items-center gap-2">
+                <span>🔍</span> {{ t.btn_inspect_gsc }}
+            </button>
+
+            <!-- 3. 本地 SEO 质检 -->
+            <button hx-post="/api/v1/actions/audit-seo" 
+                    hx-swap="none"
+                    hx-on::before-request="this.disabled = true; this.classList.add('opacity-50')"
+                    hx-on::after-request="this.disabled = false; this.classList.remove('opacity-50'); showToast('全站 SEO 质检任务已派发...'); htmx.trigger('#dashboard-stats', 'refresh'); htmx.trigger('#recent-table', 'refresh')"
+                    class="px-3.5 py-2 rounded-lg text-sm font-medium bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 shadow-sm transition active:scale-95 flex items-center gap-2">
+                <span>🛡️</span> {{ t.btn_audit_seo }}
+            </button>
+
+            <!-- 4. 全引擎提交 -->
+            <button hx-post="/api/v1/actions/submit-all" 
+                    hx-swap="none"
+                    hx-on::before-request="this.disabled = true; this.classList.add('opacity-50')"
+                    hx-on::after-request="this.disabled = false; this.classList.remove('opacity-50'); showToast('全引擎提交任务已生成...'); htmx.trigger('#dashboard-stats', 'refresh'); htmx.trigger('#recent-table', 'refresh')"
+                    class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition active:scale-95 flex items-center gap-2">
+                <span>🚀</span> {{ t.btn_submit_all }}
+            </button>
+
+            <!-- 5. 核心新增：一键停止/清空队列 -->
+            <button hx-post="/api/v1/actions/cancel-tasks" 
+                    hx-swap="none"
+                    hx-confirm="确定要停止当前所有正在排队的任务吗？"
+                    hx-on::after-request="showToast('已成功停止并清空所有排队任务！', true); htmx.trigger('#dashboard-stats', 'refresh'); htmx.trigger('#recent-table', 'refresh')"
+                    class="px-3 py-2 rounded-lg text-sm font-medium bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 shadow-sm transition active:scale-95 flex items-center gap-1.5"
+                    title="停止并取消所有排队中的后台任务">
+                <span>⏹️</span> 停止任务
+            </button>
+        </div>
+    </div>
+
+    <!-- 动态指标卡片 -->
+    <div id="dashboard-stats"
+         hx-get="/partials/stats"
+         hx-trigger="refresh from:body, every 3s"
+         hx-swap="innerHTML">
+        {% include "partials/stats.html" %}
+    </div>
+
+    <!-- 动态速览表 -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+            <h3 class="font-semibold text-white flex items-center gap-2">
+                {{ t.table_recent_title }}
+                <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </h3>
+            <a href="/urls" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">{{ t.table_view_all }} &rarr;</a>
+        </div>
+        <div id="recent-table"
+             hx-get="/partials/recent-urls"
+             hx-trigger="refresh from:body, every 3s"
+             hx-swap="innerHTML"
+             class="overflow-x-auto">
+            {% include "partials/recent_table.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}

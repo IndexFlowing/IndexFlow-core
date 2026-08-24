@@ -8,30 +8,14 @@ pub struct AppConfig {
     pub database_url: String,
     pub db_max_connections: u32,
 
-    /// Scheduler tick interval (seconds). Default 60.
     pub scheduler_interval_secs: u64,
     pub scheduler_batch_size: i64,
-
-    /// Worker poll intervals
     pub worker_poll_interval_secs: u64,
-    /// Submit worker interval (smooth rate limiting for IndexNow). Default 5s.
     pub submit_worker_interval_secs: u64,
-
-    pub sync_worker_batch: i64,
     pub submit_worker_batch: i64,
-
     pub max_task_retries: i32,
-
-    /// Google Indexing API daily quota (UTC day). Default 200.
     pub google_daily_quota: u32,
-
-    /// GSC URL Inspection API rolling 24h quota. Default 2000.
-    pub gsc_inspect_daily_quota: u32,
-
-    /// JWT signing secret for admin sessions.
     pub jwt_secret: String,
-    /// JWT expiry hours. Default 168 (7 days).
-    pub jwt_expiry_hours: i64,
 }
 
 impl AppConfig {
@@ -45,29 +29,26 @@ impl AppConfig {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(8080),
             database_url: env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set"),
+                .unwrap_or_else(|_| "sqlite:indexflow.db?mode=rwc".into()),
             db_max_connections: env::var("DB_MAX_CONNECTIONS")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(10),
+                .unwrap_or(5),
             scheduler_interval_secs: env_u64("SCHEDULER_INTERVAL_SECS", 60),
             scheduler_batch_size: env_i64("SCHEDULER_BATCH_SIZE", 200),
             worker_poll_interval_secs: env_u64("WORKER_POLL_INTERVAL_SECS", 2),
             submit_worker_interval_secs: env_u64("SUBMIT_WORKER_INTERVAL_SECS", 5),
-            sync_worker_batch: env_i64("SYNC_WORKER_BATCH", 2),
             submit_worker_batch: env_i64("SUBMIT_WORKER_BATCH", 10),
             max_task_retries: env_i64("MAX_TASK_RETRIES", 5) as i32,
             google_daily_quota: env_u64("GOOGLE_DAILY_QUOTA", 200) as u32,
-            gsc_inspect_daily_quota: env_u64("GSC_INSPECT_DAILY_QUOTA", 2000) as u32,
             jwt_secret: env::var("JWT_SECRET")
-                .or_else(|_| env::var("API_SECRET_KEY"))
-                .unwrap_or_else(|_| "indexflow-dev-secret-change-me".into()),
-            jwt_expiry_hours: env_i64("JWT_EXPIRY_HOURS", 168),
+                .unwrap_or_else(|_| "indexflow-secret-key-change-in-production".into()),
         };
 
         info!(
             host = %config.server_host,
             port = config.server_port,
+            db = %config.database_url,
             "config loaded"
         );
         config

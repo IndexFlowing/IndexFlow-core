@@ -16,15 +16,6 @@ impl ProviderKind {
             Self::Bing => "bing",
         }
     }
-
-    #[allow(dead_code)]
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "google" => Some(Self::Google),
-            "bing" => Some(Self::Bing),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -32,7 +23,7 @@ pub struct SubmissionLog {
     pub id: i64,
     pub url_id: i64,
     pub provider: String,
-    pub success: bool,
+    pub success: i64, // 0 | 1 in SQLite
     pub response_code: Option<i32>,
     pub response_body: Option<String>,
     pub created_at: DateTime<Utc>,

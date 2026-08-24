@@ -1,36 +1,31 @@
-use crate::domain::{HealthCheck, QualityGateResult};
-use sqlx::PgPool;
+use crate::domain::QualityGateResult;
+use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, SqlitePool};
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct HealthCheck {
+    pub id: i64,
+    pub url_id: i64,
+    pub http_status: Option<i32>,
+    pub response_time: Option<i32>,
+    pub has_noindex: bool,
+    pub has_canonical: bool,
+    pub meta_description: Option<String>,
+    pub h1_content: Option<String>,
+    pub robots_directive: Option<String>,
+    pub payload_bytes: Option<i32>,
+    pub hreflang: Option<String>,
+    pub checked_at: chrono::DateTime<chrono::Utc>,
+}
 
 #[derive(Clone)]
 pub struct HealthCheckRepo {
-    pool: PgPool,
+    pool: SqlitePool,
 }
 
 impl HealthCheckRepo {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
-    }
-
-    #[allow(dead_code)]
-    pub async fn insert(
-        &self,
-        url_id: i64,
-        http_status: Option<i32>,
-        response_time: Option<i32>,
-        has_noindex: bool,
-        has_canonical: bool,
-    ) -> anyhow::Result<HealthCheck> {
-        self.insert_from_gate(
-            url_id,
-            &QualityGateResult {
-                http_status,
-                response_time_ms: response_time,
-                has_noindex,
-                has_canonical,
-                ..QualityGateResult::default()
-            },
-        )
-        .await
     }
 
     pub async fn insert_from_gate(
@@ -43,17 +38,17 @@ impl HealthCheckRepo {
             r#"
             INSERT INTO health_checks (
                 url_id, http_status, response_time, has_noindex, has_canonical,
-                meta_description, h1_content, robots_directive, payload_bytes, hreflang
+                meta_description, h1_content, robots_directive, payload_bytes, hreflang, checked_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
             RETURNING *
             "#,
         )
         .bind(url_id)
         .bind(gate.http_status)
         .bind(gate.response_time_ms)
-        .bind(gate.has_noindex)
-        .bind(gate.has_canonical)
+        .bind(if gate.has_noindex { 1 } else { 0 })
+        .bind(if gate.has_canonical { 1 } else { 0 })
         .bind(gate.meta_description.as_deref())
         .bind(gate.h1_content.as_deref())
         .bind(gate.robots_directive.as_deref())
@@ -62,21 +57,5 @@ impl HealthCheckRepo {
         .fetch_one(&self.pool)
         .await?;
         Ok(row)
-    }
-
-    pub async fn list_by_url(&self, url_id: i64, limit: i64) -> anyhow::Result<Vec<HealthCheck>> {
-        let rows = sqlx::query_as::<_, HealthCheck>(
-            r#"
-            SELECT * FROM health_checks
-            WHERE url_id = $1
-            ORDER BY checked_at DESC
-            LIMIT $2
-            "#,
-        )
-        .bind(url_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows)
     }
 }

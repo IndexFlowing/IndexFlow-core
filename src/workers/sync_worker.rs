@@ -1,37 +1,33 @@
 use crate::application::SitemapService;
 use crate::config::AppConfig;
-use crate::domain::{SiteStatus, SitemapStatus, TaskType};
-use crate::infrastructure::{SiteRepo, SitemapRepo, TaskRepo, UrlRepo};
+use crate::infrastructure::{SiteRepo, UrlRepo};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-/// Worker: SYNC_SITEMAP — download/parse sitemap, upsert URLs.
 #[derive(Clone)]
 pub struct SyncWorker {
-    tasks: TaskRepo,
-    sitemaps: SitemapRepo,
     urls: UrlRepo,
     sites: SiteRepo,
     sitemap_service: SitemapService,
+    is_sync_running: Arc<AtomicBool>,
     config: AppConfig,
 }
 
 impl SyncWorker {
     pub fn new(
-        tasks: TaskRepo,
-        sitemaps: SitemapRepo,
         urls: UrlRepo,
         sites: SiteRepo,
         sitemap_service: SitemapService,
+        is_sync_running: Arc<AtomicBool>,
         config: AppConfig,
     ) -> Self {
         Self {
-            tasks,
-            sitemaps,
             urls,
             sites,
             sitemap_service,
+            is_sync_running,
             config,
         }
     }
@@ -39,7 +35,7 @@ impl SyncWorker {
     pub fn start(self: Arc<Self>) {
         let interval = Duration::from_secs(self.config.worker_poll_interval_secs);
         tokio::spawn(async move {
-            info!("sync worker started");
+            info!("Sitemap Sync Worker 待机就绪");
             loop {
                 if let Err(e) = self.tick().await {
                     error!(error = %e, "sync worker tick failed");
@@ -50,80 +46,45 @@ impl SyncWorker {
     }
 
     async fn tick(&self) -> anyhow::Result<()> {
-        let claimed = self
-            .tasks
-            .claim(TaskType::SyncSitemap, self.config.sync_worker_batch)
-            .await?;
-        for task in claimed {
-            if let Err(e) = self.process_task(&task).await {
-                error!(task_id = task.id, error = %e, "SYNC_SITEMAP failed");
-                let _ = self.tasks.mark_failed(task.id, &e.to_string()).await;
-                if let Some(sm_id) = task.sitemap_id {
-                    let _ = self.sitemaps.mark_failed(sm_id, &e.to_string()).await;
-                }
-                let _ = self
-                    .sites
-                    .update_status(task.site_id, SiteStatus::NeedAttention)
-                    .await;
-            }
-        }
-        Ok(())
-    }
-
-    async fn process_task(&self, task: &crate::domain::Task) -> anyhow::Result<()> {
-        let sitemap_id = task
-            .sitemap_id
-            .ok_or_else(|| anyhow::anyhow!("SYNC_SITEMAP missing sitemap_id"))?;
-        let sitemap = self
-            .sitemaps
-            .find_by_id(sitemap_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("sitemap {sitemap_id} not found"))?;
-
-        info!(
-            site_id = task.site_id,
-            sitemap = %sitemap.url,
-            "syncing sitemap"
-        );
-
-        let (sm_type, page_entries) = self
-            .sitemap_service
-            .expand_to_page_entries(&sitemap.url, 3)
-            .await?;
-
-        if page_entries.is_empty() {
-            warn!(sitemap = %sitemap.url, "sitemap yielded 0 URLs");
+        if !self.is_sync_running.load(Ordering::Relaxed) {
+            return Ok(());
         }
 
-        // Process in chunks to avoid huge memory spikes for million-URL sites
+        // 抢占到执行权后立即重置标志
+        self.is_sync_running.store(false, Ordering::Relaxed);
+
+        let Some(site) = self.sites.get().await? else {
+            warn!("Site configuration not found");
+            return Ok(());
+        };
+
+        let Some(ref sm_url) = site.sitemap_url else {
+            warn!("No sitemap URL configured");
+            return Ok(());
+        };
+
+        info!(sitemap = %sm_url, "🌐 [SyncWorker] 正在连接目标 Sitemap 并流式解析...");
+        let (_is_index, entries) = self.sitemap_service.expand_to_page_entries(sm_url, 3).await?;
+
+        if entries.is_empty() {
+            warn!(sitemap = %sm_url, "⚠️ [SyncWorker] Sitemap 解析完毕，但提取到 0 条有效 URL");
+            return Ok(());
+        }
+
+        info!(total_found = entries.len(), "✨ [SyncWorker] Sitemap 解析成功，正在批量写入 SQLite...");
+
         let chunk_size = 500usize;
         let mut total_inserted = 0u64;
-        let mut total_urls = 0u64;
 
-        // Controlled workflow: only discover URLs (DISCOVERED). No auto CHECK/SUBMIT.
-        // Priority initialized from <priority> + <lastmod> + new-discovery boost.
-        for chunk in page_entries.chunks(chunk_size) {
-            let (inserted, ids, _new_ids) = self
-                .urls
-                .batch_upsert_discovered(task.site_id, chunk)
-                .await?;
+        for chunk in entries.chunks(chunk_size) {
+            let (inserted, _, _) = self.urls.batch_upsert_discovered(chunk).await?;
             total_inserted += inserted;
-            total_urls += ids.len() as u64;
         }
 
-        self.sitemaps
-            .mark_synced(sitemap_id, sm_type, SitemapStatus::Active, None)
-            .await?;
-        self.sites
-            .update_status(task.site_id, SiteStatus::Ready)
-            .await?;
-        self.tasks.mark_success(task.id).await?;
-
         info!(
-            site_id = task.site_id,
-            total_urls,
-            total_inserted,
-            "sitemap sync complete"
+            total_urls = entries.len(),
+            new_inserted = total_inserted,
+            "🎉 [SyncWorker] Sitemap 数据同步入库完成！"
         );
         Ok(())
     }

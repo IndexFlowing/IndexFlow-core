@@ -2,7 +2,6 @@ use crate::domain::{ProviderKind, Site};
 use crate::providers::{bing::BingProvider, google::GoogleProvider, SearchProvider, SubmissionResult};
 use tracing::warn;
 
-/// Routes submission to **verified** search providers for a site.
 #[derive(Clone)]
 pub struct SubmissionService {
     bing: BingProvider,
@@ -14,7 +13,6 @@ impl SubmissionService {
         Self { bing, google }
     }
 
-    /// Submit one URL only to providers with VERIFIED credential status.
     #[allow(dead_code)]
     pub async fn submit_url(
         &self,
@@ -25,7 +23,7 @@ impl SubmissionService {
         let urls = vec![page_url.to_string()];
 
         if site.bing_ready() {
-            let key = site.indexnow_key.as_deref().unwrap_or("");
+            let key = site.bing_indexnow_key.as_deref().unwrap_or("");
             match self.bing.submit_batch(&site.domain, key, &urls).await {
                 Ok(batch) => {
                     if let Some(r) = batch.into_iter().next() {
@@ -42,7 +40,6 @@ impl SubmissionService {
             }
         }
 
-        // google_ready() already excludes sites with active quota pause
         if site.google_ready() {
             let key = site.google_service_account_json.as_deref().unwrap_or("");
             match self.google.submit_batch(&site.domain, key, &urls).await {
@@ -61,26 +58,21 @@ impl SubmissionService {
             }
         } else if site.google_verified() && site.google_quota_paused() {
             warn!(
-                site_id = site.id,
-                "skipping Google submit: site 24h quota pause active until {:?}",
+                "skipping Google submit: 24h quota pause active until {:?}",
                 site.google_quota_paused_until
             );
         }
 
         if results.is_empty() {
             if site.has_any_credentials_filled() {
-                anyhow::bail!(
-                    "no verified providers for site {} (credentials filled but not verified)",
-                    site.id
-                );
+                anyhow::bail!("credentials filled but not ready");
             }
-            anyhow::bail!("no search provider credentials configured for site {}", site.id);
+            anyhow::bail!("no search provider credentials configured");
         }
 
         Ok(results)
     }
 
-    /// Batch IndexNow submit (gate-passed URLs only).
     pub async fn submit_url_batch_bing(
         &self,
         domain: &str,
@@ -90,7 +82,6 @@ impl SubmissionService {
         self.bing.submit_batch(domain, key, urls).await
     }
 
-    /// Single Google Indexing API submit (gate-passed URL only).
     pub async fn submit_url_google(
         &self,
         site: &Site,

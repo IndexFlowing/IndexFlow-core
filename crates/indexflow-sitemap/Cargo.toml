@@ -1,0 +1,27 @@
+[package]
+name = "indexflow-sitemap"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance, fault-tolerant Google-compliant Sitemap parser and crawler supporting XML, Gzip, Plain Text, Images, Videos, News, and Hreflang extensions"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/indexflow/indexflow"
+keywords = ["sitemap", "seo", "google", "xml", "crawler"]
+categories = ["web-programming", "parser-implementations"]
+
+[dependencies]
+quick-xml = "0.36"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+url = "2"
+flate2 = { version = "1.0", optional = true }
+reqwest = { version = "0.11", features = ["rustls-tls"], default-features = false, optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[features]
+default = ["gzip", "fetch"]
+gzip = ["dep:flate2"]
+fetch = ["dep:reqwest", "gzip"]

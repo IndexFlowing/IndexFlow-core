@@ -1,3 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/indexflow-sitemap",
+    "crates/indexflow-seo",
+    ".",
+]
+
 [package]
 name = "indexflow-core"
 version = "0.1.0"
@@ -7,18 +15,23 @@ authors = ["IndexFlow Team"]
 publish = false
 
 [dependencies]
+# 内部独立库
+indexflow-sitemap = { path = "crates/indexflow-sitemap" }
+indexflow-seo = { path = "crates/indexflow-seo" }
+
 # Web
 axum = { version = "0.7", features = ["macros"] }
+askama = "0.12"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# Database
+# Database (SQLite)
 sqlx = { version = "0.8", features = [
     "runtime-tokio",
-    "postgres",
+    "sqlite",
     "chrono",
     "migrate",
 ] }
@@ -40,8 +53,6 @@ sha2 = "0.10"
 hex = "0.4"
 jsonwebtoken = "9"
 bcrypt = "0.15"
-quick-xml = "0.36"
 dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-

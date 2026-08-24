@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct AdminUser {
@@ -13,16 +13,16 @@ pub struct AdminUser {
 
 #[derive(Clone)]
 pub struct AdminRepo {
-    pool: PgPool,
+    pool: SqlitePool,
 }
 
 impl AdminRepo {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 
     pub async fn count(&self) -> anyhow::Result<i64> {
-        let row: (i64,) = sqlx::query_as(r#"SELECT COUNT(*)::bigint FROM admin_users"#)
+        let row: (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM admin_users"#)
             .fetch_one(&self.pool)
             .await?;
         Ok(row.0)
@@ -41,8 +41,8 @@ impl AdminRepo {
     pub async fn create(&self, username: &str, password_hash: &str) -> anyhow::Result<AdminUser> {
         let row = sqlx::query_as::<_, AdminUser>(
             r#"
-            INSERT INTO admin_users (username, password_hash)
-            VALUES ($1, $2)
+            INSERT INTO admin_users (username, password_hash, created_at, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             RETURNING *
             "#,
         )

@@ -1,117 +1,100 @@
--- IndexFlow Core schema v1.0
--- Aligns with docs/IndexFlow database design v1.0 (+ provider credentials on sites)
-
--- 1. sites
-CREATE TABLE IF NOT EXISTS sites (
-    id              BIGSERIAL PRIMARY KEY,
-    domain          VARCHAR(255) NOT NULL UNIQUE,
-    status          VARCHAR(50)  NOT NULL DEFAULT 'CREATED',
-    -- Community Edition: store provider credentials per site
-    indexnow_key                VARCHAR(255),
+-- 1. 单站点配置表 (固定 ID = 1)
+CREATE TABLE IF NOT EXISTS site_config (
+    id                          INTEGER PRIMARY KEY CHECK (id = 1),
+    domain                      TEXT NOT NULL,
+    sitemap_url                 TEXT,
+    bing_indexnow_key           TEXT,
     google_service_account_json TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    gsc_property_url            TEXT,
+    gsc_daily_quota             INTEGER NOT NULL DEFAULT 2000,
+    google_daily_quota          INTEGER NOT NULL DEFAULT 200,
+    google_quota_paused_until   TEXT,
+    created_at                  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_sites_status ON sites(status);
-
--- 2. sitemaps
-CREATE TABLE IF NOT EXISTS sitemaps (
-    id              BIGSERIAL PRIMARY KEY,
-    site_id         BIGINT       NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
-    url             TEXT         NOT NULL,
-    type            VARCHAR(50)  NOT NULL DEFAULT 'URL_SET', -- INDEX | URL_SET
-    status          VARCHAR(50)  NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE | FAILED | RECOVERING
-    last_sync_at    TIMESTAMPTZ,
-    last_error      TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    UNIQUE (site_id, url)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sitemaps_site_id ON sitemaps(site_id);
-
--- 3. urls (core resource table)
+-- 2. URL 核心资产表 (直接回答 IndexFlow 5 大核心问题)
 CREATE TABLE IF NOT EXISTS urls (
-    id                  BIGSERIAL PRIMARY KEY,
-    site_id             BIGINT       NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
-    url                 TEXT         NOT NULL,
-    url_hash            VARCHAR(64)  NOT NULL,
-    status              VARCHAR(50)  NOT NULL DEFAULT 'DISCOVERED',
-    first_seen_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    last_seen_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    last_http_status    INTEGER,
-    last_checked_at     TIMESTAMPTZ,
-    next_check_at       TIMESTAMPTZ,
-    last_submitted_at   TIMESTAMPTZ,
-    created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    UNIQUE (site_id, url_hash)
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    url                 TEXT NOT NULL UNIQUE,
+    url_hash            TEXT NOT NULL UNIQUE,
+    
+    -- 基础 SEO 诊断
+    seo_status          TEXT NOT NULL DEFAULT 'PENDING',  -- PASS | WARN | FAIL | PENDING
+    seo_issue           TEXT,                             -- 404 / noindex / canonical_mismatch / missing_title
+    page_title          TEXT,
+    meta_description    TEXT,
+    h1_content          TEXT,
+    canonical_url       TEXT,
+    http_status         INTEGER,
+    locale              TEXT NOT NULL DEFAULT 'default',
+    path_prefix         TEXT NOT NULL DEFAULT '/',
+    
+    -- Google 收录状态 (GSC URL Inspection)
+    gsc_index_status    TEXT NOT NULL DEFAULT 'UNKNOWN',  -- INDEXED | NOT_INDEXED | UNKNOWN
+    gsc_coverage_state  TEXT,                             -- GSC 原始状态
+    gsc_last_crawled_at TEXT,
+    gsc_inspected_at    TEXT,
+    
+    -- 提交记录
+    bing_status         TEXT NOT NULL DEFAULT 'NONE',     -- NONE | SUBMITTED | FAILED
+    bing_submitted_at   TEXT,
+    bing_error          TEXT,
+    
+    google_status       TEXT NOT NULL DEFAULT 'NONE',     -- NONE | SUBMITTED | FAILED
+    google_submitted_at TEXT,
+    google_error        TEXT,
+
+    priority            INTEGER NOT NULL DEFAULT 100,
+    sitemap_lastmod     TEXT,
+    last_checked_at     TEXT,
+    first_seen_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_urls_site_next_check ON urls(site_id, next_check_at);
-CREATE INDEX IF NOT EXISTS idx_urls_site_status ON urls(site_id, status);
-CREATE INDEX IF NOT EXISTS idx_urls_next_check ON urls(next_check_at) WHERE next_check_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_urls_status_ready ON urls(status) WHERE status = 'READY_SUBMIT';
+CREATE INDEX IF NOT EXISTS idx_urls_seo_status ON urls(seo_status);
+CREATE INDEX IF NOT EXISTS idx_urls_gsc_status ON urls(gsc_index_status);
+CREATE INDEX IF NOT EXISTS idx_urls_bing_status ON urls(bing_status);
+CREATE INDEX IF NOT EXISTS idx_urls_google_status ON urls(google_status);
+CREATE INDEX IF NOT EXISTS idx_urls_priority ON urls(priority ASC);
 
--- 4. tasks (system actions; not the same as URL)
-CREATE TABLE IF NOT EXISTS tasks (
-    id              BIGSERIAL PRIMARY KEY,
-    site_id         BIGINT       NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
-    url_id          BIGINT       REFERENCES urls(id) ON DELETE CASCADE, -- NULL for SYNC_SITEMAP
-    sitemap_id      BIGINT       REFERENCES sitemaps(id) ON DELETE SET NULL,
-    task_type       VARCHAR(50)  NOT NULL, -- SYNC_SITEMAP | CHECK_URL | SUBMIT_URL | RETRY_SUBMISSION
-    status          VARCHAR(50)  NOT NULL DEFAULT 'PENDING', -- PENDING | PROCESSING | SUCCESS | FAILED
-    priority        INTEGER      NOT NULL DEFAULT 100,
-    scheduled_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    started_at      TIMESTAMPTZ,
-    finished_at     TIMESTAMPTZ,
-    retry_count     INTEGER      NOT NULL DEFAULT 0,
-    locked_at       TIMESTAMPTZ,
-    last_error      TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+-- 3. 管理员用户表
+CREATE TABLE IF NOT EXISTS admin_users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_tasks_claim
-    ON tasks(status, scheduled_at, priority)
-    WHERE status = 'PENDING';
-CREATE INDEX IF NOT EXISTS idx_tasks_site_id ON tasks(site_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_url_id ON tasks(url_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_type_status ON tasks(task_type, status);
-
--- Avoid duplicate pending work for the same URL+type
-CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_pending_url_type
-    ON tasks(url_id, task_type)
-    WHERE status = 'PENDING' AND url_id IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_pending_sitemap_sync
-    ON tasks(site_id, sitemap_id, task_type)
-    WHERE status = 'PENDING' AND task_type = 'SYNC_SITEMAP' AND sitemap_id IS NOT NULL;
-
--- 5. health_checks (event history)
-CREATE TABLE IF NOT EXISTS health_checks (
-    id              BIGSERIAL PRIMARY KEY,
-    url_id          BIGINT       NOT NULL REFERENCES urls(id) ON DELETE CASCADE,
-    http_status     INTEGER,
-    response_time   INTEGER, -- milliseconds
-    has_noindex     BOOLEAN      NOT NULL DEFAULT FALSE,
-    has_canonical   BOOLEAN      NOT NULL DEFAULT FALSE,
-    checked_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_health_checks_url_id ON health_checks(url_id, checked_at DESC);
-
--- 6. submission_logs (search engine interaction history)
+-- 4. 提交日志表
 CREATE TABLE IF NOT EXISTS submission_logs (
-    id              BIGSERIAL PRIMARY KEY,
-    url_id          BIGINT       NOT NULL REFERENCES urls(id) ON DELETE CASCADE,
-    provider        VARCHAR(50)  NOT NULL, -- google | bing
-    success         BOOLEAN      NOT NULL DEFAULT FALSE,
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    url_id          INTEGER NOT NULL REFERENCES urls(id) ON DELETE CASCADE,
+    provider        TEXT NOT NULL, -- google | bing
+    success         INTEGER NOT NULL DEFAULT 0, -- 0 | 1
     response_code   INTEGER,
     response_body   TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_submission_logs_url_id ON submission_logs(url_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_submission_logs_provider_time ON submission_logs(provider, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_submission_logs_url ON submission_logs(url_id, created_at DESC);
+
+-- 5. 健康检查历史表
+CREATE TABLE IF NOT EXISTS health_checks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    url_id          INTEGER NOT NULL REFERENCES urls(id) ON DELETE CASCADE,
+    http_status     INTEGER,
+    response_time   INTEGER,
+    has_noindex     INTEGER NOT NULL DEFAULT 0,
+    has_canonical   INTEGER NOT NULL DEFAULT 0,
+    meta_description TEXT,
+    h1_content      TEXT,
+    robots_directive TEXT,
+    payload_bytes   INTEGER,
+    hreflang        TEXT,
+    checked_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_health_checks_url ON health_checks(url_id, checked_at DESC);

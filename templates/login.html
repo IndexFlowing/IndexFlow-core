@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}" class="h-full bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if setup_required %}{{ t.setup_title }}{% else %}{{ t.login_title }}{% endif %} - IndexFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full flex flex-col md:flex-row font-sans">
+    <!-- ==========================================
+         左栏：登录 / 初始化操作区
+         ========================================== -->
+    <div class="w-full md:w-1/2 lg:w-5/12 flex flex-col justify-between p-8 sm:p-12 md:p-16 bg-slate-950 z-10">
+        <!-- 顶部 Logo 与语言切换 -->
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span class="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-xl text-white shadow-lg shadow-indigo-600/30">IF</span>
+                <span class="text-xl font-bold tracking-tight text-white">IndexFlow</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">OpenCore</span>
+            </div>
+            <!-- 语言切换 -->
+            <div class="flex items-center rounded-lg bg-slate-800 p-0.5 text-xs font-medium border border-slate-700">
+                <a href="?lang=zh" class="px-2 py-1 rounded {% if lang == "zh" %}bg-indigo-600 text-white font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">中文</a>
+                <a href="?lang=en" class="px-2 py-1 rounded {% if lang == "en" %}bg-indigo-600 text-white font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">EN</a>
+            </div>
+        </div>
+
+        <!-- 中间表单卡片 -->
+        <div class="my-auto py-8 max-w-sm w-full mx-auto">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {% if setup_required %}
+                    {{ t.setup_title }}
+                    {% else %}
+                    {{ t.login_title }}
+                    {% endif %}
+                </h1>
+                <p class="mt-2 text-sm text-slate-400">
+                    {% if setup_required %}
+                    {{ t.setup_desc }}
+                    {% else %}
+                    {{ t.login_desc }}
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- 错误提示 Banner -->
+            {% if let Some(err) = error %}
+            <div class="mt-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{{ err }}</span>
+            </div>
+            {% endif %}
+
+            <!-- 表单提交 -->
+            <form method="POST" action="{% if setup_required %}/setup{% else %}/login{% endif %}" class="mt-8 space-y-5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">{{ t.label_username }}</label>
+                    <input type="text" name="username" required autofocus placeholder="admin"
+                        class="mt-2 block w-full rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition shadow-inner">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">{{ t.label_password }}</label>
+                    <input type="password" name="password" required placeholder="••••••••"
+                        class="mt-2 block w-full rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition shadow-inner">
+                </div>
+
+                <button type="submit"
+                    class="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition duration-150 active:scale-[0.98] shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2">
+                    <span>{% if setup_required %}{{ t.btn_setup }}{% else %}{{ t.btn_login }}{% endif %}</span>
+                    <span class="text-base">&rarr;</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- 底部版权与官网外链 -->
+        <div class="text-xs text-slate-500 pt-4 border-t border-slate-900 flex items-center justify-between">
+            <span>IndexFlow v0.1.0</span>
+            <a href="https://www.indexflowing.com" target="_blank" rel="noopener noreferrer" class="text-slate-400 hover:text-indigo-400 transition">
+                Powered by IndexFlowing &rarr;
+            </a>
+        </div>
+    </div>
+
+    <!-- ==========================================
+         右栏：品牌视觉与核心功能特性展板
+         ========================================== -->
+    <div class="hidden md:flex md:w-1/2 lg:w-7/12 bg-gradient-to-br from-indigo-950/60 via-slate-900 to-slate-950 border-l border-slate-800/80 p-12 lg:p-16 flex-col justify-between relative overflow-hidden">
+        <!-- 装饰背景光效 -->
+        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none"></div>
+        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 rounded-full bg-sky-500/10 blur-3xl pointer-events-none"></div>
+
+        <!-- 顶部功能 Slogan -->
+        <div class="relative z-10">
+            <span class="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                🚀 OpenCore Engine
+            </span>
+            <h2 class="text-3xl lg:text-4xl font-extrabold text-white mt-4 tracking-tight leading-tight">
+                {{ t.auth_hero_title }}<br/>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-sky-400">{{ t.auth_hero_subtitle }}</span>
+            </h2>
+        </div>
+
+        <!-- 中间：4 大核心架构特性卡片 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-8 relative z-10">
+            <!-- 1. Sitemap 流式发现 -->
+            <div class="bg-slate-900/60 backdrop-blur border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition">
+                <div class="h-8 w-8 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center text-lg mb-3">🔄</div>
+                <h3 class="font-bold text-sm text-white">Sitemap Parsing</h3>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">Stream parse Sitemap XML & index tree with CDATA and hreflang support.</p>
+            </div>
+
+            <!-- 2. 本地技术 SEO 门禁 -->
+            <div class="bg-slate-900/60 backdrop-blur border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition">
+                <div class="h-8 w-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg mb-3">🛡️</div>
+                <h3 class="font-bold text-sm text-white">Technical SEO Gate</h3>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">Pre-flight checks for 404, noindex tags, and canonical mismatches.</p>
+            </div>
+
+            <!-- 3. GSC 深度收录检测 -->
+            <div class="bg-slate-900/60 backdrop-blur border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition">
+                <div class="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-lg mb-3">📊</div>
+                <h3 class="font-bold text-sm text-white">GSC Inspection</h3>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">Accurately determine Google index coverage and last crawl timestamps.</p>
+            </div>
+
+            <!-- 4. 双引擎秒级推送 -->
+            <div class="bg-slate-900/60 backdrop-blur border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition">
+                <div class="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-lg mb-3">⚡</div>
+                <h3 class="font-bold text-sm text-white">Engine Submission</h3>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">Bing IndexNow batch push and Google Indexing API quota circuit breaker.</p>
+            </div>
+        </div>
+
+        <!-- 底部说明卡片 -->
+        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-400 flex items-center justify-between relative z-10">
+            <span class="font-mono">SQLite WAL · Lightweight Monolith</span>
+            <span class="text-emerald-400 font-semibold flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Single Binary
+            </span>
+        </div>
+    </div>
+</body>
+</html>

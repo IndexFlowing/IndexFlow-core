@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t.nav_urls }} - IndexFlow{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">{{ t.nav_urls }}</h2>
+            <p class="text-sm text-slate-400 mt-1">Total {{ total }} items · Page {{ page }}</p>
+        </div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-slate-950/60 text-xs uppercase text-slate-400 border-b border-slate-800 font-semibold tracking-wider">
+                    <tr>
+                        <th class="px-6 py-4">{{ t.th_url }}</th>
+                        <th class="px-6 py-4">{{ t.th_google_index }}</th>
+                        <th class="px-6 py-4">{{ t.th_seo_audit }}</th>
+                        <th class="px-6 py-4">{{ t.th_bing_submit }} / {{ t.th_google_submit }}</th>
+                        <th class="px-6 py-4 text-right">{{ t.th_actions }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 font-mono text-xs">
+                    {% for url in items %}
+                    <tr class="hover:bg-slate-800/40 transition">
+                        <td class="px-6 py-4 max-w-sm">
+                            <a href="{{ url.url }}" target="_blank" class="text-slate-100 hover:text-indigo-400 truncate block font-sans text-sm font-medium">{{ url.page_title.as_deref().unwrap_or(url.url.as_str()) }}</a>
+                            <span class="text-slate-500 text-xs block truncate mt-0.5">{{ url.url }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if url.gsc_index_status == "INDEXED" %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{{ t.status_indexed }}</span>
+                            {% else if url.gsc_index_status == "UNKNOWN" %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-400">{{ t.status_uninspected }}</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">{{ t.status_not_indexed }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if url.seo_status == "PASS" %}
+                            <span class="text-emerald-400">✓ {{ t.status_seo_pass }}</span>
+                            {% else if url.seo_status == "FAIL" %}
+                            <span class="text-rose-400 font-semibold" title="{{ url.seo_issue.as_deref().unwrap_or("") }}">✗ {{ url.seo_issue.as_deref().unwrap_or("Issue") }}</span>
+                            {% else %}
+                            <span class="text-slate-500">{{ t.status_seo_pending }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <span>Bing: {% if url.bing_status == "SUBMITTED" %}<b class="text-sky-400">✓</b>{% else %}<span class="text-slate-600">-</span>{% endif %}</span>
+                                <span>Google: {% if url.google_status == "SUBMITTED" %}<b class="text-emerald-400">✓</b>{% else %}<span class="text-slate-600">-</span>{% endif %}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right space-x-2 font-sans">
+                            <button hx-post="/api/v1/urls/{{ url.id }}/recheck" 
+                                    hx-swap="none" 
+                                    hx-on::after-request="showToast('已完成该 URL SEO 重新质检'); setTimeout(() => location.reload(), 500)"
+                                    class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition">Audit</button>
+                            <button hx-post="/api/v1/urls/{{ url.id }}/submit" 
+                                    hx-swap="none" 
+                                    hx-on::after-request="showToast('已向搜索引擎提交该 URL'); setTimeout(() => location.reload(), 500)"
+                                    class="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs text-white transition">Submit</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

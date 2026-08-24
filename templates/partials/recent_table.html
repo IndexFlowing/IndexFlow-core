@@ -1,0 +1,50 @@
+<table class="w-full text-left text-sm text-slate-300">
+    <thead class="bg-slate-950/50 text-xs uppercase text-slate-400 border-b border-slate-800">
+        <tr>
+            <th class="px-6 py-3">{{ t.th_url }}</th>
+            <th class="px-6 py-3">{{ t.th_google_index }}</th>
+            <th class="px-6 py-3">{{ t.th_seo_audit }}</th>
+            <th class="px-6 py-3">{{ t.th_bing_submit }}</th>
+            <th class="px-6 py-3">{{ t.th_google_submit }}</th>
+        </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800/60 font-mono text-xs">
+        {% for url in recent_urls %}
+        <tr class="hover:bg-slate-800/30 transition">
+            <td class="px-6 py-3.5 max-w-md truncate text-slate-200" title="{{ url.url }}">{{ url.url }}</td>
+            <td class="px-6 py-3.5">
+                {% if url.gsc_index_status == "INDEXED" %}
+                <span class="text-emerald-400 font-semibold">✓ {{ t.status_indexed }}</span>
+                {% else if url.gsc_index_status == "UNKNOWN" %}
+                <span class="text-slate-500">? {{ t.status_uninspected }}</span>
+                {% else %}
+                <span class="text-rose-400 font-semibold">✗ {{ t.status_not_indexed }}</span>
+                {% endif %}
+            </td>
+            <td class="px-6 py-3.5">
+                {% if url.seo_status == "PASS" %}
+                <span class="text-emerald-400">✓ {{ t.status_seo_pass }}</span>
+                {% else if url.seo_status == "FAIL" %}
+                <span class="text-rose-400" title="{{ url.seo_issue.as_deref().unwrap_or("") }}">✗ {{ url.seo_issue.as_deref().unwrap_or("Issue") }}</span>
+                {% else %}
+                <span class="text-slate-500">{{ t.status_seo_pending }}</span>
+                {% endif %}
+            </td>
+            <td class="px-6 py-3.5">
+                {% if url.bing_status == "SUBMITTED" %}
+                <span class="text-sky-400">✓ {{ t.status_submitted }}</span>
+                {% else %}
+                <span class="text-slate-600">-</span>
+                {% endif %}
+            </td>
+            <td class="px-6 py-3.5">
+                {% if url.google_status == "SUBMITTED" %}
+                <span class="text-emerald-400">✓ {{ t.status_submitted }}</span>
+                {% else %}
+                <span class="text-slate-600">-</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

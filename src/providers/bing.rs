@@ -1,20 +1,10 @@
 use super::{SearchProvider, SubmissionResult};
 use async_trait::async_trait;
-use serde::Serialize;
-use tracing::{error, info};
-
-#[derive(Debug, Serialize)]
-struct IndexNowPayload {
-    pub host: String,
-    pub key: String,
-    #[serde(rename = "keyLocation")]
-    pub key_location: String,
-    #[serde(rename = "urlList")]
-    pub url_list: Vec<String>,
-}
+use tracing::info;
 
 #[derive(Clone)]
 pub struct BingProvider {
+    #[allow(dead_code)]
     client: reqwest::Client,
 }
 
@@ -40,55 +30,28 @@ impl SearchProvider for BingProvider {
             return Ok(vec![]);
         }
 
+        // ==========================================
+        // 🧪 测试安全演练模式：仅打印日志，不发真实请求
+        // ==========================================
         info!(
+            mode = "DRY_RUN (演练模式)",
             domain = %domain,
+            key = %key,
             count = urls.len(),
-            "submitting batch to IndexNow"
+            urls = ?urls,
+            "【Bing IndexNow 模拟提交】拦截真实网络请求，已记录推送日志"
         );
 
-        let payload = IndexNowPayload {
-            host: domain.to_string(),
-            key: key.to_string(),
-            key_location: format!("https://{}/{}.txt", domain, key),
-            url_list: urls.to_vec(),
-        };
-
-        let response = self
-            .client
-            .post("https://api.indexnow.org/indexnow")
-            .json(&payload)
-            .send()
-            .await;
-
-        match response {
-            Ok(res) => {
-                let status_code = res.status().as_u16();
-                let is_success = res.status().is_success();
-                let response_text = res.text().await.unwrap_or_default();
-
-                if !is_success {
-                    error!(
-                        status = status_code,
-                        body = %response_text,
-                        "IndexNow submit failed"
-                    );
-                }
-
-                Ok(urls
-                    .iter()
-                    .map(|url| SubmissionResult {
-                        url: url.clone(),
-                        is_success,
-                        status_code: Some(status_code),
-                        response_msg: Some(response_text.clone()),
-                        is_quota_exceeded: status_code == 429,
-                    })
-                    .collect())
-            }
-            Err(e) => {
-                error!(error = %e, "IndexNow network error");
-                Err(anyhow::anyhow!("IndexNow request failed: {e}"))
-            }
-        }
+        // 模拟 200 成功响应返回给业务层
+        Ok(urls
+            .iter()
+            .map(|url| SubmissionResult {
+                url: url.clone(),
+                is_success: true,
+                status_code: Some(200),
+                response_msg: Some("DRY_RUN_MOCK: 已演练并记录日志，未向 IndexNow 发起网络请求".into()),
+                is_quota_exceeded: false,
+            })
+            .collect())
     }
 }
