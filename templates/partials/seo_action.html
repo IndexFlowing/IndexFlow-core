@@ -1,0 +1,24 @@
+<div id="seo-action-box" 
+     {% if is_seo_running %}
+     hx-get="/partials/actions/seo?site_id={{ current_site_id }}" 
+     hx-trigger="every 2s" 
+     hx-swap="outerHTML"
+     {% endif %}>
+    {% if is_seo_running %}
+    <button hx-post="/api/v1/actions/cancel-seo?site_id={{ current_site_id }}" 
+            hx-target="#seo-action-box"
+            hx-swap="outerHTML"
+            hx-on::after-request="showToast('已停止 SEO 质检', true)"
+            class="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/30 transition active:scale-95 flex items-center gap-2 animate-pulse">
+        <span>⏹️</span> 停止 SEO (30并发质检中...)
+    </button>
+    {% else %}
+    <button hx-post="/api/v1/actions/audit-seo?site_id={{ current_site_id }}" 
+            hx-target="#seo-action-box"
+            hx-swap="outerHTML"
+            hx-on::after-request="showToast('全站 30 并发 SEO 质检已启动...')"
+            class="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-lg shadow-amber-900/20 transition active:scale-95 flex items-center gap-2">
+        <span>🛡️</span> 启动 SEO 增量质检
+    </button>
+    {% endif %}
+</div>

@@ -54,29 +54,29 @@ impl BingSubmitWorker {
             return Ok(());
         }
 
-        let Some(site) = self.sites.get().await? else { return Ok(()); };
-        if !site.bing_ready() { return Ok(()); }
-
         let pending = self.urls.fetch_pending_bing(self.config.submit_worker_batch).await?;
         if pending.is_empty() {
             return Ok(());
         }
 
-        let key = site.bing_indexnow_key.as_deref().unwrap_or("");
-        let url_strings: Vec<String> = pending.iter().map(|u| u.url.clone()).collect();
+        for url in pending {
+            if let Ok(Some(site)) = self.sites.find_by_id(url.site_id).await {
+                if !site.bing_ready() { continue; }
+                let key = site.bing_indexnow_key.as_deref().unwrap_or("");
+                if let Ok(results) = self.submission.submit_url_batch_bing(&site.domain, key, &[url.url.clone()]).await {
+                    if let Some(res) = results.first() {
+                        let _ = self.logs.insert(
+                            url.id,
+                            ProviderKind::Bing,
+                            res.is_success,
+                            res.status_code.map(|c| c as i32),
+                            res.response_msg.as_deref(),
+                        ).await;
 
-        if let Ok(results) = self.submission.submit_url_batch_bing(&site.domain, key, &url_strings).await {
-            for (url, res) in pending.iter().zip(results.iter()) {
-                self.logs.insert(
-                    url.id,
-                    ProviderKind::Bing,
-                    res.is_success,
-                    res.status_code.map(|c| c as i32),
-                    res.response_msg.as_deref(),
-                ).await?;
-
-                let st = if res.is_success { "SUBMITTED" } else { "FAILED" };
-                self.urls.apply_submit_outcome(url.id, Some(st), res.response_msg.as_deref(), None, None).await?;
+                        let st = if res.is_success { "SUBMITTED" } else { "FAILED" };
+                        let _ = self.urls.apply_submit_outcome(url.id, Some(st), res.response_msg.as_deref(), None, None).await;
+                    }
+                }
             }
         }
         Ok(())

@@ -1,5 +1,4 @@
-use crate::config::AppConfig;
-use crate::infrastructure::{DashboardStats, SiteConfig, SiteRepo, UrlRepo};
+use crate::infrastructure::{DashboardStats, Site, SiteRepo, UrlRepo};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -11,8 +10,6 @@ pub struct SiteService {
     pub is_seo_running: Arc<AtomicBool>,
     pub is_gsc_running: Arc<AtomicBool>,
     pub is_submit_running: Arc<AtomicBool>,
-    #[allow(dead_code)]
-    config: AppConfig,
 }
 
 impl SiteService {
@@ -23,7 +20,6 @@ impl SiteService {
         is_seo_running: Arc<AtomicBool>,
         is_gsc_running: Arc<AtomicBool>,
         is_submit_running: Arc<AtomicBool>,
-        config: AppConfig,
     ) -> Self {
         Self {
             sites,
@@ -32,64 +28,77 @@ impl SiteService {
             is_seo_running,
             is_gsc_running,
             is_submit_running,
-            config,
         }
     }
 
-    pub async fn get_config(&self) -> anyhow::Result<Option<SiteConfig>> {
-        self.sites.get().await
+    pub async fn list_sites(&self) -> anyhow::Result<Vec<Site>> {
+        self.sites.list_all().await
     }
 
-    pub async fn save_config(
+    pub async fn get_site_or_default(&self, site_id: Option<i64>) -> anyhow::Result<Option<Site>> {
+        if let Some(id) = site_id {
+            if let Some(site) = self.sites.find_by_id(id).await? {
+                return Ok(Some(site));
+            }
+        }
+        self.sites.get_default().await
+    }
+
+    pub async fn save_site(
         &self,
+        id: Option<i64>,
         domain: &str,
         sitemap_url: Option<&str>,
         bing_key: Option<&str>,
         google_json: Option<&str>,
-    ) -> anyhow::Result<SiteConfig> {
-        let site = self.sites.save_or_update(domain, sitemap_url, bing_key, google_json).await?;
-        if sitemap_url.is_some() {
-            self.is_sync_running.store(true, Ordering::Relaxed);
-        }
-        Ok(site)
+    ) -> anyhow::Result<Site> {
+        self.sites.save_or_update(id, domain, sitemap_url, bing_key, google_json).await
     }
 
-    pub async fn dashboard_stats(&self) -> anyhow::Result<DashboardStats> {
-        self.urls.dashboard_stats().await
+    pub async fn delete_site(&self, id: i64) -> anyhow::Result<()> {
+        self.sites.delete_site(id).await
     }
 
-    /// 触发同步 Sitemap
+    pub async fn dashboard_stats(&self, site_id: i64) -> anyhow::Result<DashboardStats> {
+        self.urls.dashboard_stats(site_id).await
+    }
+
     pub async fn trigger_sync_sitemap(&self) -> anyhow::Result<bool> {
         self.is_sync_running.store(true, Ordering::Relaxed);
         Ok(true)
     }
 
-    /// 触发高并发 SEO 质检
-    pub async fn trigger_seo_audit(&self) -> anyhow::Result<u64> {
+    pub async fn trigger_seo_audit(&self) -> anyhow::Result<bool> {
         self.is_seo_running.store(true, Ordering::Relaxed);
-        let count = self.urls.reset_all_seo_status().await?;
-        Ok(count)
+        Ok(true)
     }
 
-    /// 触发高并发 GSC 检测
-    pub async fn trigger_gsc_inspect(&self) -> anyhow::Result<u64> {
+    pub async fn trigger_gsc_inspect(&self) -> anyhow::Result<bool> {
         self.is_gsc_running.store(true, Ordering::Relaxed);
-        let count = self.urls.reset_all_gsc_status().await?;
-        Ok(count)
+        Ok(true)
     }
 
-    /// 触发全引擎提交
-    pub async fn trigger_submit_all(&self) -> anyhow::Result<u64> {
+    pub async fn trigger_submit_all(&self) -> anyhow::Result<bool> {
         self.is_submit_running.store(true, Ordering::Relaxed);
-        let count = self.urls.reset_all_submit_status().await?;
-        Ok(count)
+        Ok(true)
     }
 
-    /// 毫秒级停止所有正在运行的 Worker
-    pub async fn cancel_tasks(&self) -> anyhow::Result<u64> {
+    pub async fn cancel_sync(&self) -> anyhow::Result<u64> {
         self.is_sync_running.store(false, Ordering::Relaxed);
+        Ok(0)
+    }
+
+    pub async fn cancel_seo(&self) -> anyhow::Result<u64> {
         self.is_seo_running.store(false, Ordering::Relaxed);
+        Ok(0)
+    }
+
+    pub async fn cancel_gsc(&self) -> anyhow::Result<u64> {
         self.is_gsc_running.store(false, Ordering::Relaxed);
+        Ok(0)
+    }
+
+    pub async fn cancel_submit(&self) -> anyhow::Result<u64> {
         self.is_submit_running.store(false, Ordering::Relaxed);
         Ok(0)
     }

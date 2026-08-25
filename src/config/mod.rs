@@ -8,13 +8,9 @@ pub struct AppConfig {
     pub database_url: String,
     pub db_max_connections: u32,
 
-    pub scheduler_interval_secs: u64,
-    pub scheduler_batch_size: i64,
     pub worker_poll_interval_secs: u64,
     pub submit_worker_interval_secs: u64,
     pub submit_worker_batch: i64,
-    pub max_task_retries: i32,
-    pub google_daily_quota: u32,
     pub jwt_secret: String,
 }
 
@@ -34,13 +30,9 @@ impl AppConfig {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(5),
-            scheduler_interval_secs: env_u64("SCHEDULER_INTERVAL_SECS", 60),
-            scheduler_batch_size: env_i64("SCHEDULER_BATCH_SIZE", 200),
             worker_poll_interval_secs: env_u64("WORKER_POLL_INTERVAL_SECS", 2),
             submit_worker_interval_secs: env_u64("SUBMIT_WORKER_INTERVAL_SECS", 5),
             submit_worker_batch: env_i64("SUBMIT_WORKER_BATCH", 10),
-            max_task_retries: env_i64("MAX_TASK_RETRIES", 5) as i32,
-            google_daily_quota: env_u64("GOOGLE_DAILY_QUOTA", 200) as u32,
             jwt_secret: env::var("JWT_SECRET")
                 .unwrap_or_else(|_| "indexflow-secret-key-change-in-production".into()),
         };

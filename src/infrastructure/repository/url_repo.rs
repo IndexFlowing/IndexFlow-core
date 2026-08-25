@@ -9,8 +9,11 @@ pub struct DashboardStats {
     pub url_total: i64,
     pub google_indexed: i64,
     pub google_not_indexed: i64,
-    pub seo_issues: i64,
+    pub seo_passed: i64,                       // 新增：SEO 正常通过数
+    pub seo_issues: i64,                       // SEO 拦截数
     pub pending_submit: i64,
+    pub gsc_used_24h: i64,
+    pub last_seo_scan_at: Option<DateTime<Utc>>, // 新增：全站最近一次质检完成时间
 }
 
 #[derive(Clone)]
@@ -25,6 +28,7 @@ impl UrlRepo {
 
     pub async fn batch_upsert_discovered(
         &self,
+        site_id: i64,
         entries: &[SitemapUrlEntry],
     ) -> anyhow::Result<(u64, Vec<i64>, Vec<i64>)> {
         if entries.is_empty() {
@@ -40,8 +44,9 @@ impl UrlRepo {
         for entry in entries {
             let hash = hash_url(&entry.loc);
             let prev: Option<(Option<DateTime<Utc>>,)> = sqlx::query_as(
-                r#"SELECT sitemap_lastmod FROM urls WHERE url_hash = $1"#,
+                r#"SELECT sitemap_lastmod FROM urls WHERE site_id = $1 AND url_hash = $2"#,
             )
+            .bind(site_id)
             .bind(&hash)
             .fetch_optional(&mut *tx)
             .await?;
@@ -59,10 +64,10 @@ impl UrlRepo {
             let row = sqlx::query_as::<_, (i64,)>(
                 r#"
                 INSERT INTO urls (
-                    url, url_hash, seo_status, priority, sitemap_lastmod,
+                    site_id, url, url_hash, seo_status, priority, sitemap_lastmod,
                     locale, path_prefix, first_seen_at, created_at, updated_at
                 )
-                VALUES ($1, $2, 'PENDING', $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(url_hash) DO UPDATE SET
                     sitemap_lastmod = EXCLUDED.sitemap_lastmod,
                     priority = EXCLUDED.priority,
@@ -70,6 +75,7 @@ impl UrlRepo {
                 RETURNING id
                 "#,
             )
+            .bind(site_id)
             .bind(&entry.loc)
             .bind(&hash)
             .bind(computed)
@@ -90,18 +96,24 @@ impl UrlRepo {
         Ok((inserted_count, all_ids, new_ids))
     }
 
-    pub async fn dashboard_stats(&self) -> anyhow::Result<DashboardStats> {
-        let row: (i64, i64, i64, i64, i64) = sqlx::query_as(
+    /// 查询当前站点的 Dashboard 看板统计（单条条件聚合 SQL，<3ms）
+    pub async fn dashboard_stats(&self, site_id: i64) -> anyhow::Result<DashboardStats> {
+        let row: (i64, i64, i64, i64, i64, i64, i64, Option<DateTime<Utc>>) = sqlx::query_as(
             r#"
             SELECT
                 COUNT(*) AS url_total,
                 COUNT(CASE WHEN gsc_index_status = 'INDEXED' THEN 1 END) AS google_indexed,
                 COUNT(CASE WHEN gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED') THEN 1 END) AS google_not_indexed,
+                COUNT(CASE WHEN seo_status = 'PASS' THEN 1 END) AS seo_passed,
                 COUNT(CASE WHEN seo_status IN ('WARN', 'FAIL') THEN 1 END) AS seo_issues,
-                COUNT(CASE WHEN (bing_status = 'NONE' OR google_status = 'NONE') AND seo_status != 'FAIL' THEN 1 END) AS pending_submit
+                COUNT(CASE WHEN (bing_status = 'NONE' OR google_status = 'NONE') AND seo_status != 'FAIL' THEN 1 END) AS pending_submit,
+                COUNT(CASE WHEN gsc_inspected_at > datetime('now', '-24 hours') THEN 1 END) AS gsc_used_24h,
+                MAX(last_checked_at) AS last_seo_scan_at
             FROM urls
+            WHERE site_id = $1
             "#,
         )
+        .bind(site_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -109,25 +121,67 @@ impl UrlRepo {
             url_total: row.0,
             google_indexed: row.1,
             google_not_indexed: row.2,
-            seo_issues: row.3,
-            pending_submit: row.4,
+            seo_passed: row.3,
+            seo_issues: row.4,
+            pending_submit: row.5,
+            gsc_used_24h: row.6,
+            last_seo_scan_at: row.7,
         })
     }
 
-    pub async fn list(&self, page: i64, limit: i64) -> anyhow::Result<(Vec<Url>, i64)> {
+    pub async fn list_filtered(
+        &self,
+        site_id: i64,
+        page: i64,
+        limit: i64,
+        query_str: Option<&str>,
+        seo_filter: Option<&str>,
+        gsc_filter: Option<&str>,
+        bing_filter: Option<&str>,
+        google_filter: Option<&str>,
+    ) -> anyhow::Result<(Vec<Url>, i64)> {
         let offset = (page.max(1) - 1) * limit;
+        let q_pattern = query_str.map(|s| format!("%{}%", s.trim()));
 
-        let total: (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM urls"#)
-            .fetch_one(&self.pool)
-            .await?;
+        let total: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM urls
+            WHERE site_id = $1
+              AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
+              AND ($3 IS NULL OR seo_status = $3)
+              AND ($4 IS NULL OR gsc_index_status = $4)
+              AND ($5 IS NULL OR bing_status = $5)
+              AND ($6 IS NULL OR google_status = $6)
+            "#,
+        )
+        .bind(site_id)
+        .bind(&q_pattern)
+        .bind(seo_filter)
+        .bind(gsc_filter)
+        .bind(bing_filter)
+        .bind(google_filter)
+        .fetch_one(&self.pool)
+        .await?;
 
         let items = sqlx::query_as::<_, Url>(
             r#"
             SELECT * FROM urls
+            WHERE site_id = $1
+              AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
+              AND ($3 IS NULL OR seo_status = $3)
+              AND ($4 IS NULL OR gsc_index_status = $4)
+              AND ($5 IS NULL OR bing_status = $5)
+              AND ($6 IS NULL OR google_status = $6)
             ORDER BY priority ASC, id DESC
-            LIMIT $1 OFFSET $2
+            LIMIT $7 OFFSET $8
             "#,
         )
+        .bind(site_id)
+        .bind(&q_pattern)
+        .bind(seo_filter)
+        .bind(gsc_filter)
+        .bind(bing_filter)
+        .bind(google_filter)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -205,45 +259,6 @@ impl UrlRepo {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
-    }
-
-    pub async fn reset_all_seo_status(&self) -> anyhow::Result<u64> {
-        let res = sqlx::query(
-            r#"
-            UPDATE urls
-            SET seo_status = 'PENDING', updated_at = CURRENT_TIMESTAMP
-            WHERE seo_status != 'PENDING'
-            "#
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(res.rows_affected())
-    }
-
-    pub async fn reset_all_gsc_status(&self) -> anyhow::Result<u64> {
-        let res = sqlx::query(
-            r#"
-            UPDATE urls
-            SET gsc_index_status = 'UNKNOWN', updated_at = CURRENT_TIMESTAMP
-            WHERE gsc_index_status != 'UNKNOWN'
-            "#
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(res.rows_affected())
-    }
-
-    pub async fn reset_all_submit_status(&self) -> anyhow::Result<u64> {
-        let res = sqlx::query(
-            r#"
-            UPDATE urls
-            SET bing_status = 'NONE', google_status = 'NONE', updated_at = CURRENT_TIMESTAMP
-            WHERE bing_status = 'FAILED' OR google_status = 'FAILED'
-            "#
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(res.rows_affected())
     }
 
     pub async fn persist_seo_scan(&self, id: i64, gate: &QualityGateResult) -> anyhow::Result<()> {

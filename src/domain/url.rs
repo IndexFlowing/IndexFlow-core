@@ -36,6 +36,7 @@ pub enum SitemapType {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Url {
     pub id: i64,
+    pub site_id: i64, // 核心新增：多站点归属
     pub url: String,
     pub url_hash: String,
     

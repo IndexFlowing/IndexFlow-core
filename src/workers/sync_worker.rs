@@ -50,42 +50,36 @@ impl SyncWorker {
             return Ok(());
         }
 
-        // 抢占到执行权后立即重置标志
         self.is_sync_running.store(false, Ordering::Relaxed);
 
-        let Some(site) = self.sites.get().await? else {
-            warn!("Site configuration not found");
-            return Ok(());
-        };
+        let sites = self.sites.list_all().await?;
+        for site in sites {
+            let Some(ref sm_url) = site.sitemap_url else { continue; };
 
-        let Some(ref sm_url) = site.sitemap_url else {
-            warn!("No sitemap URL configured");
-            return Ok(());
-        };
+            info!(sitemap = %sm_url, domain = %site.domain, "🌐 [SyncWorker] 正在连接目标 Sitemap 并流式解析...");
+            let (_is_index, entries) = match self.sitemap_service.expand_to_page_entries(sm_url, 3).await {
+                Ok(res) => res,
+                Err(e) => {
+                    warn!(error = %e, "Sitemap fetch failed");
+                    continue;
+                }
+            };
 
-        info!(sitemap = %sm_url, "🌐 [SyncWorker] 正在连接目标 Sitemap 并流式解析...");
-        let (_is_index, entries) = self.sitemap_service.expand_to_page_entries(sm_url, 3).await?;
+            let chunk_size = 500usize;
+            let mut total_inserted = 0u64;
 
-        if entries.is_empty() {
-            warn!(sitemap = %sm_url, "⚠️ [SyncWorker] Sitemap 解析完毕，但提取到 0 条有效 URL");
-            return Ok(());
+            for chunk in entries.chunks(chunk_size) {
+                let (inserted, _, _) = self.urls.batch_upsert_discovered(site.id, chunk).await?;
+                total_inserted += inserted;
+            }
+
+            info!(
+                domain = %site.domain,
+                total_urls = entries.len(),
+                new_inserted = total_inserted,
+                "🎉 [SyncWorker] 站点 Sitemap 同步入库完成！"
+            );
         }
-
-        info!(total_found = entries.len(), "✨ [SyncWorker] Sitemap 解析成功，正在批量写入 SQLite...");
-
-        let chunk_size = 500usize;
-        let mut total_inserted = 0u64;
-
-        for chunk in entries.chunks(chunk_size) {
-            let (inserted, _, _) = self.urls.batch_upsert_discovered(chunk).await?;
-            total_inserted += inserted;
-        }
-
-        info!(
-            total_urls = entries.len(),
-            new_inserted = total_inserted,
-            "🎉 [SyncWorker] Sitemap 数据同步入库完成！"
-        );
         Ok(())
     }
 }

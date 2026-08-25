@@ -1,1 +1,2 @@
-pub use crate::infrastructure::SiteConfig as Site;
+#[allow(unused_imports)]
+pub use crate::infrastructure::site_repo::Site;

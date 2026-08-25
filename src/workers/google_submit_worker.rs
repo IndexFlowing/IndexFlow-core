@@ -55,16 +55,6 @@ impl GoogleSubmitWorker {
             return Ok(());
         }
 
-        let Some(site) = self.sites.get().await? else { return Ok(()); };
-        if !site.google_ready() { return Ok(()); }
-
-        let quota = self.logs.google_quota_window(self.config.google_daily_quota).await?;
-        if quota.exhausted() {
-            let until = quota.next_free_at.unwrap_or_else(|| Utc::now() + ChronoDuration::hours(24));
-            self.sites.set_google_quota_paused_until(until).await?;
-            return Ok(());
-        }
-
         let pending = self.urls.fetch_pending_google(self.config.submit_worker_batch).await?;
         if pending.is_empty() {
             return Ok(());
@@ -75,21 +65,32 @@ impl GoogleSubmitWorker {
                 break;
             }
 
-            match self.submission.submit_url_google(&site, &url.url).await {
-                Ok(res) => {
-                    self.logs.insert(
-                        url.id,
-                        ProviderKind::Google,
-                        res.is_success,
-                        res.status_code.map(|c| c as i32),
-                        res.response_msg.as_deref(),
-                    ).await?;
+            if let Ok(Some(site)) = self.sites.find_by_id(url.site_id).await {
+                if !site.google_ready() { continue; }
 
-                    let st = if res.is_success { "SUBMITTED" } else { "FAILED" };
-                    self.urls.apply_submit_outcome(url.id, None, None, Some(st), res.response_msg.as_deref()).await?;
+                let quota = self.logs.google_quota_window(site.google_daily_quota as u32).await?;
+                if quota.exhausted() {
+                    let until = quota.next_free_at.unwrap_or_else(|| Utc::now() + ChronoDuration::hours(24));
+                    let _ = self.sites.set_google_quota_paused_until(site.id, until).await;
+                    return Ok(());
                 }
-                Err(e) => {
-                    let _ = self.urls.apply_submit_outcome(url.id, None, None, Some("FAILED"), Some(&e.to_string())).await;
+
+                match self.submission.submit_url_google(&site, &url.url).await {
+                    Ok(res) => {
+                        let _ = self.logs.insert(
+                            url.id,
+                            ProviderKind::Google,
+                            res.is_success,
+                            res.status_code.map(|c| c as i32),
+                            res.response_msg.as_deref(),
+                        ).await;
+
+                        let st = if res.is_success { "SUBMITTED" } else { "FAILED" };
+                        let _ = self.urls.apply_submit_outcome(url.id, None, None, Some(st), res.response_msg.as_deref()).await;
+                    }
+                    Err(e) => {
+                        let _ = self.urls.apply_submit_outcome(url.id, None, None, Some("FAILED"), Some(&e.to_string())).await;
+                    }
                 }
             }
         }

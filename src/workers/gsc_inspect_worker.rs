@@ -37,7 +37,7 @@ impl GscInspectWorker {
     pub fn start(self: Arc<Self>) {
         let interval = Duration::from_secs(self.config.submit_worker_interval_secs);
         tokio::spawn(async move {
-            info!("GSC Inspect Worker 待机就绪 (等待用户触发)");
+            info!("GSC Inspect Worker 待机就绪");
             loop {
                 if let Err(e) = self.tick().await {
                     error!(error = %e, "GSC inspect worker tick failed");
@@ -48,20 +48,13 @@ impl GscInspectWorker {
     }
 
     async fn tick(&self) -> anyhow::Result<()> {
-        // 未手动启动时直接跳过，零消耗
         if !self.is_running.load(Ordering::Relaxed) {
             return Ok(());
         }
 
-        let Some(site) = self.sites.get().await? else { return Ok(()); };
-        let sa = site.google_service_account_json.as_deref().unwrap_or("");
-        if sa.trim().is_empty() { return Ok(()); }
-
         let pending = self.urls.fetch_pending_gsc(50).await?;
         if pending.is_empty() {
-            // 全部查完，自动回到待机
             self.is_running.store(false, Ordering::Relaxed);
-            info!("🎉 GSC 收录检测已全部完成，Worker 回到待机状态");
             return Ok(());
         }
 
@@ -77,12 +70,14 @@ impl GscInspectWorker {
 
             let sem = semaphore.clone();
             let gsc_svc = self.gsc.clone();
-            let site_clone = site.clone();
+            let sites = self.sites.clone();
 
             set.spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
-                if let Ok(res) = gsc_svc.inspect_one(&site_clone, &url.url).await {
-                    let _ = gsc_svc.apply_inspect_result(url.id, &res).await;
+                if let Ok(Some(site)) = sites.find_by_id(url.site_id).await {
+                    if let Ok(res) = gsc_svc.inspect_one(&site, &url.url).await {
+                        let _ = gsc_svc.apply_inspect_result(url.id, &res).await;
+                    }
                 }
             });
         }

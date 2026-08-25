@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{ lang }}" class="h-full bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
+<html lang="{{ lang }}" class="h-full bg-slate-950 text-slate-100 selection:bg-cyan-500 selection:text-white">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}IndexFlow{% endblock %}</title>
+    <link rel="icon" type="image/png" href="/static/logo.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <style>
@@ -12,8 +13,8 @@
         .htmx-request.htmx-indicator { display: inline-block; }
     </style>
 </head>
-<body class="min-h-full flex flex-col font-sans">
-    <!-- 全局 Toast 提示气泡容器 -->
+<body class="min-h-full flex flex-col font-sans bg-slate-950 text-slate-100">
+    <!-- 全局 Toast 提示容器 -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
     <script>
@@ -23,7 +24,7 @@
             toast.className = `px-4 py-3 rounded-xl border text-sm font-medium shadow-2xl flex items-center gap-2 transform transition-all duration-300 translate-y-2 opacity-0 pointer-events-auto ${
                 isError 
                 ? 'bg-rose-950/90 border-rose-800 text-rose-200' 
-                : 'bg-slate-900/95 border-slate-700 text-emerald-300'
+                : 'bg-slate-900/95 border-cyan-500/30 text-cyan-300 shadow-cyan-950/40'
             }`;
             toast.innerHTML = `<span>${isError ? '⚠️' : '⚡'}</span><span>${message}</span>`;
             container.appendChild(toast);
@@ -39,48 +40,122 @@
         }
     </script>
 
-    <!-- 顶部导航栏 -->
-    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <!-- ==========================================
+         【通栏顶部导航栏 (Global Top Header)】
+         ========================================== -->
+    <header class="h-16 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur sticky top-0 z-40 shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+            <!-- 左侧：新版 Logo + 品牌名 -->
             <div class="flex items-center space-x-6">
-                <a href="/" class="flex items-center space-x-3">
-                    <span class="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-xl text-white tracking-wider">IF</span>
-                    <span class="text-xl font-bold tracking-tight text-white">IndexFlow</span>
-                    <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">OpenCore</span>
+                <a href="/?site_id={{ current_site_id }}" class="flex items-center space-x-3 group">
+                    <img src="/static/logo.png" alt="IndexFlow Logo" 
+                         onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\' fill=\'none\'><rect width=\'36\' height=\'36\' rx=\'10\' fill=\'%230066FF\'/><path d=\'M10 18L16 24L26 12\' stroke=\'white\' stroke-width=\'3\' stroke-linecap=\'round\'/></svg>'" 
+                         class="h-9 w-9 rounded-xl shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-sky-200">
+                            IndexFlow
+                        </span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">OpenCore</span>
+                    </div>
                 </a>
-                <nav class="hidden md:flex space-x-1">
-                    <a href="/" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 text-slate-300 hover:text-white transition">{{ t.nav_dashboard }}</a>
-                    <a href="/urls" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 text-slate-300 hover:text-white transition">{{ t.nav_urls }}</a>
-                    <a href="/settings" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 text-slate-300 hover:text-white transition">{{ t.nav_settings }}</a>
-                </nav>
             </div>
+
+            <!-- 右侧：安全状态、语言切换、官网链接 -->
             <div class="flex items-center space-x-4">
                 <span class="hidden sm:flex text-xs text-amber-400 font-mono items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
                     <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                    {{ t.dry_run_badge }}
+                    Dry-Run 安全演练
                 </span>
 
-                <!-- 语言切换器 -->
+                <!-- 语言切换 -->
                 <div class="flex items-center rounded-lg bg-slate-800 p-0.5 text-xs font-medium border border-slate-700">
-                    <a href="?lang=zh" class="px-2 py-1 rounded {% if lang == "zh" %}bg-indigo-600 text-white font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">中文</a>
-                    <a href="?lang=en" class="px-2 py-1 rounded {% if lang == "en" %}bg-indigo-600 text-white font-bold{% else %}text-slate-400 hover:text-slate-200{% endif %}">EN</a>
+                    <a href="?lang=zh&site_id={{ current_site_id }}" class="px-2.5 py-1 rounded {% if lang == "zh" %}bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold shadow-md shadow-cyan-500/20{% else %}text-slate-400 hover:text-slate-200{% endif %}">中文</a>
+                    <a href="?lang=en&site_id={{ current_site_id }}" class="px-2.5 py-1 rounded {% if lang == "en" %}bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold shadow-md shadow-cyan-500/20{% else %}text-slate-400 hover:text-slate-200{% endif %}">EN</a>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- 主体内容 -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {% block content %}{% endblock %}
-    </main>
+    <!-- ==========================================
+         【中间主体区域 (左右分栏多级菜单)】
+         ========================================== -->
+    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-6 items-start">
+        
+        <!-- 【左侧：二级业务多级菜单侧边栏】 -->
+        <aside class="w-full md:w-64 bg-slate-900 border border-slate-800 rounded-2xl p-4 shrink-0 shadow-xl space-y-4 md:sticky md:top-24">
+            <!-- 站点切换下拉框 -->
+            <div>
+                <label class="block text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1.5">当前管理站点</label>
+                {% if all_sites.len() > 0 %}
+                <select onchange="location.href='?site_id=' + this.value" 
+                        class="w-full bg-slate-950 border border-slate-700 hover:border-cyan-500/50 text-slate-100 text-xs font-semibold rounded-xl px-3 py-2.5 focus:border-cyan-500 focus:outline-none transition cursor-pointer">
+                    {% for s in all_sites %}
+                    <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>
+                        🌐 {{ s.domain }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <div class="text-xs text-slate-400 font-mono">未配置站点</div>
+                {% endif %}
+            </div>
 
-    <!-- 底部状态栏 -->
-    <footer class="border-t border-slate-900 py-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+            <!-- 二级导航功能树 -->
+            <nav class="space-y-1 text-xs font-medium border-t border-slate-800 pt-3">
+                <a href="/?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition">
+                    <span class="text-base">📊</span> 全站概览 (Dashboard)
+                </a>
+
+                <div class="pt-2 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">流水线模块</div>
+
+                <a href="/sitemap?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🔄</span> Sitemap 资产发现
+                </a>
+
+                <a href="/gsc?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🔍</span> GSC 官方收录
+                </a>
+
+                <a href="/seo?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🛡️</span> 技术 SEO 门禁
+                </a>
+
+                <a href="/submit?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🚀</span> 搜索引擎提交
+                </a>
+
+                <div class="pt-2 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">系统配置</div>
+
+                <a href="/settings?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800/80 text-slate-300 hover:text-white transition">
+                    <span class="text-base">⚙️</span> 站点与密钥管理
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 【右侧：主工作区内容】 -->
+        <main class="flex-1 w-full min-w-0">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- ==========================================
+         【通栏底部页脚 (Global Footer)】
+         ========================================== -->
+    <footer class="border-t border-slate-900 py-6 mt-auto text-center text-xs text-slate-500 flex items-center justify-center gap-2 shrink-0">
         <span>{{ t.footer_text }}</span>
         <span>·</span>
-        <a href="https://www.indexflowing.com" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 transition">
+        <a href="https://www.indexflowing.com" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 font-medium underline underline-offset-2 transition">
             Powered by IndexFlowing
         </a>
     </footer>
+
+    <!-- 模态抽屉挂载容器 -->
+    <div id="modal-container"></div>
 </body>
 </html>

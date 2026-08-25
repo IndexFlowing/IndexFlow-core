@@ -6,6 +6,7 @@ pub mod url;
 pub mod url_priority;
 
 pub use health_check::*;
+#[allow(unused_imports)]
 pub use site::*;
 pub use submission_log::*;
 pub use url::*;

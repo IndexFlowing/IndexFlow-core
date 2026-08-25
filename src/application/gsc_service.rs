@@ -1,5 +1,5 @@
 use crate::domain::coverage_to_index_status;
-use crate::infrastructure::{SiteRepo, UrlRepo};
+use crate::infrastructure::{Site, SiteRepo, UrlRepo};
 use crate::providers::google::{GoogleProvider, GscInspectResult};
 use chrono::Utc;
 
@@ -21,19 +21,19 @@ impl GscService {
 
     pub async fn inspect_one(
         &self,
-        site: &crate::domain::Site,
+        site: &Site,
         page_url: &str,
     ) -> anyhow::Result<GscInspectResult> {
         let sa = site
             .google_service_account_json
             .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("no Google credentials"))?;
+            .ok_or_else(|| anyhow::anyhow!("No Google credentials configured for site: {}", site.domain))?;
 
         let property = if let Some(ref p) = site.gsc_property_url {
             p.clone()
         } else {
             let p = self.google.resolve_gsc_property(sa, &site.domain).await?;
-            self.sites.set_gsc_property(&p).await?;
+            self.sites.set_gsc_property(site.id, &p).await?;
             p
         };
 

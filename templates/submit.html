@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}搜索引擎提交 - IndexFlow{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-xl">
+        <div class="space-y-1.5">
+            <h2 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                <span>🚀</span> 搜索引擎官方 API 提交流水线
+            </h2>
+            <div class="flex items-center gap-3 text-xs">
+                <span class="text-sky-400 font-semibold">Bing IndexNow (秒级推送)</span>
+                <span class="text-slate-600">·</span>
+                <span class="text-emerald-400 font-semibold">Google Indexing API (每日配额)</span>
+            </div>
+        </div>
+        
+        <!-- 嵌入 Submit 自感应响应式按钮 -->
+        {% include "partials/submit_action.html" %}
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4 p-6">
+        <form method="GET" action="/submit" class="flex flex-wrap items-center justify-between gap-4">
+            <input type="hidden" name="site_id" value="{{ current_site_id }}">
+            <div class="flex flex-wrap items-center gap-3">
+                <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL..." 
+                       class="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+                
+                <select name="status" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:border-cyan-500 focus:outline-none">
+                    <option value="">全部提交状态</option>
+                    <option value="SUBMITTED" {% if filter_status.as_deref() == Some("SUBMITTED") %}selected{% endif %}>✓ 已提交 (SUBMITTED)</option>
+                    <option value="NONE" {% if filter_status.as_deref() == Some("NONE") %}selected{% endif %}>未提交 (NONE)</option>
+                    <option value="FAILED" {% if filter_status.as_deref() == Some("FAILED") %}selected{% endif %}>✗ 失败 (FAILED)</option>
+                </select>
+                <button type="submit" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition">筛选</button>
+            </div>
+        </form>
+
+        <div class="overflow-x-auto border border-slate-800 rounded-xl">
+            <table class="w-full text-left text-xs divide-y divide-slate-800">
+                <thead class="bg-slate-950/60 uppercase text-slate-400 font-semibold tracking-wider">
+                    <tr>
+                        <th class="px-6 py-3.5">页面 URL / 标题</th>
+                        <th class="px-6 py-3.5">Bing IndexNow 状态</th>
+                        <th class="px-6 py-3.5">Google Indexing 状态</th>
+                        <th class="px-6 py-3.5">Bing 提交时间</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 font-mono">
+                    {% for url in items %}
+                    <tr hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/50 transition cursor-pointer group">
+                        <td class="px-6 py-3.5 max-w-md truncate font-sans text-slate-200 group-hover:text-cyan-400">
+                            <span>{{ url.page_title.as_deref().unwrap_or(url.url.as_str()) }}</span>
+                            <span class="text-slate-500 text-xs block truncate font-mono mt-0.5">{{ url.url }}</span>
+                        </td>
+                        <td class="px-6 py-3.5">
+                            {% if url.bing_status == "SUBMITTED" %}
+                            <span class="text-sky-400 font-semibold">✓ 已提交</span>
+                            {% else if url.bing_status == "FAILED" %}
+                            <span class="text-rose-400 font-semibold">✗ 失败</span>
+                            {% else %}
+                            <span class="text-slate-500">未提交</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-3.5">
+                            {% if url.google_status == "SUBMITTED" %}
+                            <span class="text-emerald-400 font-semibold">✓ 已提交</span>
+                            {% else if url.google_status == "FAILED" %}
+                            <span class="text-rose-400 font-semibold">✗ 失败</span>
+                            {% else %}
+                            <span class="text-slate-500">未提交</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-3.5 text-slate-400">
+                            {% if let Some(t) = url.bing_submitted_at %}{{ t }}{% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-400 pt-2">
+            <div>共 <b class="text-white">{{ total }}</b> 条记录 · 第 <b class="text-white">{{ page }}</b> / {{ (total + limit - 1) / limit }} 页</div>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">上一页</a>
+                {% endif %}
+                {% if page * limit < total %}
+                <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">下一页</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

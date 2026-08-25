@@ -49,17 +49,18 @@ async fn main() -> anyhow::Result<()> {
     let is_gsc_running = Arc::new(AtomicBool::new(false));
     let is_submit_running = Arc::new(AtomicBool::new(false));
 
-    // Repositories
+    // Repositories (SQLite)
     let site_repo = SiteRepo::new(pool.clone());
     let url_repo = UrlRepo::new(pool.clone());
     let health_repo = HealthCheckRepo::new(pool.clone());
     let submission_log_repo = SubmissionLogRepo::new(pool.clone());
     let admin_repo = Arc::new(AdminRepo::new(pool.clone()));
 
+    // Search Engine Providers
     let bing_provider = BingProvider::new(http.clone());
     let google_provider = GoogleProvider::new(http.clone());
 
-    // Services
+    // Domain Services
     let site_service = Arc::new(SiteService::new(
         site_repo.clone(),
         url_repo.clone(),
@@ -67,12 +68,16 @@ async fn main() -> anyhow::Result<()> {
         is_seo_running.clone(),
         is_gsc_running.clone(),
         is_submit_running.clone(),
-        config.clone(),
     ));
     let sitemap_service = SitemapService::new(http.clone());
     let health_service = HealthService::new(http.clone())?;
     let submission_service =
         SubmissionService::new(bing_provider.clone(), google_provider.clone());
+    let gsc_service = GscService::new(
+        google_provider.clone(),
+        site_repo.clone(),
+        url_repo.clone(),
+    );
     let url_service = Arc::new(UrlService::new(
         url_repo.clone(),
         health_repo.clone(),
@@ -80,14 +85,10 @@ async fn main() -> anyhow::Result<()> {
         site_repo.clone(),
         health_service.clone(),
         submission_service.clone(),
+        gsc_service.clone(),
     ));
-    let gsc_service = GscService::new(
-        google_provider.clone(),
-        site_repo.clone(),
-        url_repo.clone(),
-    );
 
-    // Background Workers (全部直驱状态机)
+    // Background Workers (纯状态机直驱)
     Arc::new(SyncWorker::new(
         url_repo.clone(),
         site_repo.clone(),

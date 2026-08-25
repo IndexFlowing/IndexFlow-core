@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct SiteConfig {
+pub struct Site {
     pub id: i64,
     pub domain: String,
     pub sitemap_url: Option<String>,
@@ -17,7 +17,7 @@ pub struct SiteConfig {
     pub updated_at: DateTime<Utc>,
 }
 
-impl SiteConfig {
+impl Site {
     pub fn has_bing_credentials(&self) -> bool {
         self.bing_indexnow_key
             .as_ref()
@@ -27,17 +27,13 @@ impl SiteConfig {
 
     pub fn has_google_credentials(&self) -> bool {
         self.google_service_account_json
-            .as_ref()
+            .as_deref()
             .map(|k| !k.trim().is_empty())
             .unwrap_or(false)
     }
 
     pub fn bing_ready(&self) -> bool {
         self.has_bing_credentials()
-    }
-
-    pub fn google_verified(&self) -> bool {
-        self.has_google_credentials()
     }
 
     pub fn google_ready(&self) -> bool {
@@ -48,10 +44,6 @@ impl SiteConfig {
         self.google_quota_paused_until
             .map(|until| until > Utc::now())
             .unwrap_or(false)
-    }
-
-    pub fn has_any_credentials_filled(&self) -> bool {
-        self.has_bing_credentials() || self.has_google_credentials()
     }
 }
 
@@ -65,70 +57,121 @@ impl SiteRepo {
         Self { pool }
     }
 
-    pub async fn get(&self) -> anyhow::Result<Option<SiteConfig>> {
-        let site = sqlx::query_as::<_, SiteConfig>(r#"SELECT * FROM site_config WHERE id = 1"#)
-            .fetch_optional(&self.pool)
-            .await?;
+    pub async fn list_all(&self) -> anyhow::Result<Vec<Site>> {
+        let sites = sqlx::query_as::<_, Site>(
+            r#"SELECT * FROM sites ORDER BY id ASC"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(sites)
+    }
+
+    pub async fn find_by_id(&self, id: i64) -> anyhow::Result<Option<Site>> {
+        let site = sqlx::query_as::<_, Site>(
+            r#"SELECT * FROM sites WHERE id = $1"#
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(site)
+    }
+
+    pub async fn get_default(&self) -> anyhow::Result<Option<Site>> {
+        let site = sqlx::query_as::<_, Site>(
+            r#"SELECT * FROM sites ORDER BY id ASC LIMIT 1"#
+        )
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(site)
     }
 
     pub async fn save_or_update(
         &self,
+        id: Option<i64>,
         domain: &str,
         sitemap_url: Option<&str>,
         bing_indexnow_key: Option<&str>,
         google_service_account_json: Option<&str>,
-    ) -> anyhow::Result<SiteConfig> {
-        let site = sqlx::query_as::<_, SiteConfig>(
-            r#"
-            INSERT INTO site_config (
-                id, domain, sitemap_url, bing_indexnow_key, google_service_account_json, updated_at
+    ) -> anyhow::Result<Site> {
+        let site = if let Some(site_id) = id {
+            sqlx::query_as::<_, Site>(
+                r#"
+                UPDATE sites
+                SET
+                    domain = $1,
+                    sitemap_url = $2,
+                    bing_indexnow_key = $3,
+                    google_service_account_json = $4,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $5
+                RETURNING *
+                "#,
             )
-            VALUES (1, $1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT(id) DO UPDATE SET
-                domain = EXCLUDED.domain,
-                sitemap_url = COALESCE(EXCLUDED.sitemap_url, site_config.sitemap_url),
-                bing_indexnow_key = COALESCE(EXCLUDED.bing_indexnow_key, site_config.bing_indexnow_key),
-                google_service_account_json = COALESCE(EXCLUDED.google_service_account_json, site_config.google_service_account_json),
-                updated_at = CURRENT_TIMESTAMP
-            RETURNING *
-            "#,
-        )
-        .bind(domain)
-        .bind(sitemap_url)
-        .bind(bing_indexnow_key)
-        .bind(google_service_account_json)
-        .fetch_one(&self.pool)
-        .await?;
+            .bind(domain)
+            .bind(sitemap_url)
+            .bind(bing_indexnow_key)
+            .bind(google_service_account_json)
+            .bind(site_id)
+            .fetch_one(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Site>(
+                r#"
+                INSERT INTO sites (
+                    domain, sitemap_url, bing_indexnow_key, google_service_account_json, updated_at
+                )
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                RETURNING *
+                "#,
+            )
+            .bind(domain)
+            .bind(sitemap_url)
+            .bind(bing_indexnow_key)
+            .bind(google_service_account_json)
+            .fetch_one(&self.pool)
+            .await?
+        };
+
         Ok(site)
+    }
+
+    pub async fn delete_site(&self, id: i64) -> anyhow::Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(r#"DELETE FROM urls WHERE site_id = $1"#).bind(id).execute(&mut *tx).await?;
+        sqlx::query(r#"DELETE FROM sites WHERE id = $1"#).bind(id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(())
     }
 
     pub async fn set_google_quota_paused_until(
         &self,
+        id: i64,
         until: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         sqlx::query(
             r#"
-            UPDATE site_config
+            UPDATE sites
             SET google_quota_paused_until = $1, updated_at = CURRENT_TIMESTAMP
-            WHERE id = 1
+            WHERE id = $2
             "#,
         )
         .bind(until)
+        .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    pub async fn set_gsc_property(&self, property_url: &str) -> anyhow::Result<()> {
+    pub async fn set_gsc_property(&self, id: i64, property_url: &str) -> anyhow::Result<()> {
         sqlx::query(
             r#"
-            UPDATE site_config
+            UPDATE sites
             SET gsc_property_url = $1, updated_at = CURRENT_TIMESTAMP
-            WHERE id = 1
+            WHERE id = $2
             "#,
         )
         .bind(property_url)
+        .bind(id)
         .execute(&self.pool)
         .await?;
         Ok(())

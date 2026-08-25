@@ -16,6 +16,7 @@ impl Language {
     }
 }
 
+#[allow(dead_code)]
 pub struct Translations {
     // 导航与通用
     pub nav_dashboard: &'static str,

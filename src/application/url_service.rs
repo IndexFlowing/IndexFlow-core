@@ -1,4 +1,4 @@
-use crate::application::{HealthService, SubmissionService};
+use crate::application::{GscService, HealthService, SubmissionService};
 use crate::domain::{ProviderKind, Url};
 use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
 use serde::Serialize;
@@ -11,6 +11,7 @@ pub struct UrlService {
     sites: SiteRepo,
     health_svc: HealthService,
     submission_svc: SubmissionService,
+    gsc_svc: GscService,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,6 +29,7 @@ impl UrlService {
         sites: SiteRepo,
         health_svc: HealthService,
         submission_svc: SubmissionService,
+        gsc_svc: GscService,
     ) -> Self {
         Self {
             urls,
@@ -36,11 +38,43 @@ impl UrlService {
             sites,
             health_svc,
             submission_svc,
+            gsc_svc,
         }
     }
 
-    pub async fn list(&self, page: i64, limit: i64) -> anyhow::Result<(Vec<Url>, i64)> {
-        self.urls.list(page, limit).await
+    pub async fn list_filtered(
+        &self,
+        site_id: i64,
+        page: i64,
+        limit: i64,
+        query_str: Option<&str>,
+        seo_filter: Option<&str>,
+        gsc_filter: Option<&str>,
+        bing_filter: Option<&str>,
+        google_filter: Option<&str>,
+    ) -> anyhow::Result<(Vec<Url>, i64)> {
+        self.urls
+            .list_filtered(
+                site_id,
+                page,
+                limit,
+                query_str,
+                seo_filter,
+                gsc_filter,
+                bing_filter,
+                google_filter,
+            )
+            .await
+    }
+
+    pub async fn list(&self, site_id: i64, page: i64, limit: i64) -> anyhow::Result<(Vec<Url>, i64)> {
+        self.urls
+            .list_filtered(site_id, page, limit, None, None, None, None, None)
+            .await
+    }
+
+    pub async fn find_by_id(&self, id: i64) -> anyhow::Result<Option<Url>> {
+        self.urls.find_by_id(id).await
     }
 
     pub async fn recheck(&self, id: i64) -> anyhow::Result<Option<RecheckResult>> {
@@ -58,11 +92,19 @@ impl UrlService {
         }))
     }
 
+    pub async fn inspect_gsc_now(&self, id: i64) -> anyhow::Result<bool> {
+        let Some(url) = self.urls.find_by_id(id).await? else { return Ok(false); };
+        let Some(site) = self.sites.find_by_id(url.site_id).await? else { return Ok(false); };
+        let res = self.gsc_svc.inspect_one(&site, &url.url).await?;
+        self.gsc_svc.apply_inspect_result(url.id, &res).await?;
+        Ok(res.ok)
+    }
+
     pub async fn submit_now(&self, id: i64, provider: &str) -> anyhow::Result<bool> {
         let Some(url) = self.urls.find_by_id(id).await? else {
             return Ok(false);
         };
-        let Some(site) = self.sites.get().await? else {
+        let Some(site) = self.sites.find_by_id(url.site_id).await? else {
             return Ok(false);
         };
 
