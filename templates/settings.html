@@ -1,37 +1,61 @@
 {% extends "base.html" %}
 
-{% block title %}多站点与凭证管理 - IndexFlow{% endblock %}
+{% block title %}多站点与搜索引擎凭证管理 - IndexFlow{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto space-y-8">
-    <div>
-        <h2 class="text-2xl font-bold text-white tracking-tight">多站点与搜索引擎凭证管理</h2>
-        <p class="text-xs text-slate-400 mt-1">管理你的多个网站资产，配置独立的 Sitemap 地址与搜索引擎 API 授权密钥。</p>
+<div class="max-w-4xl mx-auto space-y-6">
+    
+    <!-- 顶部说明横幅 -->
+    <div class="space-y-1">
+        <h2 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <span>⚙️</span> 多站点与搜索引擎凭证管理
+        </h2>
+        <p class="text-xs text-slate-400">
+            管理你的多个网站资产，配置独立的 Sitemap 路径、Bing IndexNow API Key 以及 Google 官方授权凭据。
+        </p>
     </div>
 
-    <!-- 1. 当前所有站点列表清单 -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-white">已配置站点资产</h3>
+    <!-- 1. 已配置站点资产列表卡片 -->
+    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
+        <div class="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40">
+            <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                <span>🌐</span> 已配置网站资产清单 ({{ all_sites.len() }})
+            </span>
+            <a href="/settings" class="text-xs text-cyan-400 hover:text-cyan-300 transition font-medium">
+                ＋ 添加新站点
+            </a>
         </div>
-        <div class="divide-y divide-slate-800 text-xs">
+
+        <div class="divide-y divide-slate-800/40 text-xs font-sans">
             {% for s in all_sites %}
-            <div class="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30 transition">
-                <div class="space-y-1">
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm font-bold text-white font-mono">{{ s.domain }}</span>
-                        {% if s.bing_ready() %}<span class="text-[10px] px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Bing OK</span>{% endif %}
-                        {% if s.google_ready() %}<span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Google OK</span>{% endif %}
+            <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30 transition {% if current_site_id == s.id %}bg-slate-800/20{% endif %}">
+                <div class="space-y-1.5 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-bold text-white font-mono tracking-tight">{{ s.domain }}</span>
+                        {% if current_site_id == s.id %}
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">当前控制台站点</span>
+                        {% endif %}
+                        {% if s.bing_ready() %}
+                        <span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">Bing IndexNow 就绪</span>
+                        {% endif %}
+                        {% if s.google_ready() %}
+                        <span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Google API 就绪</span>
+                        {% endif %}
                     </div>
-                    <div class="text-slate-400 font-mono text-[11px]">Sitemap: {{ s.sitemap_url.as_deref().unwrap_or("未设置") }}</div>
+                    <div class="text-slate-400 font-mono text-[11px] truncate">
+                        Sitemap: <span class="text-slate-300">{{ s.sitemap_url.as_deref().unwrap_or("未配置 Sitemap") }}</span>
+                    </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <a href="/settings?site_id={{ s.id }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition">编辑配置</a>
+                <div class="flex items-center gap-2 shrink-0">
+                    <a href="/settings?site_id={{ s.id }}" 
+                       class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition text-xs border border-slate-700/60">
+                        编辑凭证
+                    </a>
                     <button hx-post="/api/v1/sites/{{ s.id }}/delete"
-                            hx-confirm="确定要删除站点 {{ s.domain }} 及其所有关联 URL 数据吗？"
-                            hx-on::after-request="showToast('站点已删除', true); setTimeout(() => location.href='/settings', 600)"
-                            class="px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 transition">
+                            hx-confirm="⚠️ 警告：确定要彻底删除站点 {{ s.domain }} 及其名下所有已纳管的 URL 数据吗？"
+                            hx-on::after-request="showToast('站点资产已成功删除', true); setTimeout(() => location.href='/settings', 600)"
+                            class="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 transition text-xs cursor-pointer">
                         删除
                     </button>
                 </div>
@@ -40,47 +64,74 @@
         </div>
     </div>
 
-    <!-- 2. 编辑或添加新站点表单 -->
+    <!-- 2. 编辑或添加新站点表单卡片 -->
     <form hx-post="/settings"
           hx-swap="none"
-          hx-on::before-request="this.querySelector('button[type=submit]').disabled = true"
-          hx-on::after-request="this.querySelector('button[type=submit]').disabled = false; showToast('站点配置已保存！'); setTimeout(() => location.reload(), 600)"
-          class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl">
+          hx-on::before-request="this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').innerText = '保存中...'"
+          hx-on::after-request="showToast('🎉 站点与搜索引擎凭证已成功保存！'); setTimeout(() => location.reload(), 600)"
+          class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
         <input type="hidden" name="site_id" value="{{ editing_site_id.unwrap_or(0) }}">
 
-        <h3 class="text-base font-bold text-white border-b border-slate-800 pb-3">
-            {% if editing_site_id.is_some() %}编辑站点配置 (ID: #{{ editing_site_id.unwrap() }}){% else %}＋ 添加全新网站{% endif %}
-        </h3>
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
+            <h3 class="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                <span>📝</span>
+                <span>{% if editing_site_id.is_some() %}编辑站点凭证 (ID: #{{ editing_site_id.unwrap() }}){% else %}＋ 添加全新网站资产{% endif %}</span>
+            </h3>
+            {% if editing_site_id.is_some() %}
+            <a href="/settings" class="text-xs text-slate-400 hover:text-white transition">清空表单并新建 &rarr;</a>
+            {% endif %}
+        </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <!-- 网站域名 -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">{{ t.label_domain }}</label>
-                <input type="text" name="domain" value="{{ domain }}" placeholder="example.com" required 
-                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none">
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    网站域名 (Domain) <span class="text-rose-400">*</span>
+                </label>
+                <input type="text" name="domain" value="{{ domain }}" placeholder="例如: inkvilion.com" required 
+                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
+                <p class="text-[11px] text-slate-500 mt-1">主域名（不要包含 http:// 或尾部斜杠）</p>
             </div>
 
+            <!-- Sitemap 完整地址 -->
             <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">{{ t.label_sitemap }}</label>
-                <input type="url" name="sitemap_url" value="{{ sitemap_url }}" placeholder="https://example.com/sitemap.xml" 
-                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none">
+                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Sitemap XML 完整地址
+                </label>
+                <input type="url" name="sitemap_url" value="{{ sitemap_url }}" placeholder="https://www.example.com/sitemap.xml" 
+                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
+                <p class="text-[11px] text-slate-500 mt-1">支持 XML 索引树与 .xml.gz 压缩格式</p>
             </div>
         </div>
 
+        <!-- Bing IndexNow API Key -->
         <div>
-            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">{{ t.label_bing_key }}</label>
-            <input type="text" name="bing_indexnow_key" value="{{ bing_indexnow_key }}" placeholder="32位 IndexNow API Key" 
-                   class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none">
+            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Bing IndexNow API Key</span>
+                <span class="text-[11px] text-sky-400 font-mono font-normal">支持秒级推送</span>
+            </label>
+            <input type="text" name="bing_indexnow_key" value="{{ bing_indexnow_key }}" placeholder="32位十六进制 IndexNow 密钥" 
+                   class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
+            <p class="text-[11px] text-slate-500 mt-1">在 Bing Webmaster Tools 后台获取的 32 位 IndexNow API Key</p>
         </div>
 
+        <!-- Google Service Account 密钥 JSON -->
         <div>
-            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">{{ t.label_google_sa }}</label>
-            <textarea name="google_service_account_json" rows="5" placeholder='{"type": "service_account", ...}' 
-                      class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 font-mono text-[11px] text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none">{{ google_service_account_json }}</textarea>
+            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Google 官方服务账号密钥 (Service Account Key JSON)</span>
+                <span class="text-[11px] text-emerald-400 font-mono font-normal">GSC + Indexing 统一凭据</span>
+            </label>
+            <textarea name="google_service_account_json" rows="6" placeholder='{"type": "service_account", "project_id": "...", "private_key": "-----BEGIN PRIVATE KEY-----...", "client_email": "...@...iam.gserviceaccount.com"}' 
+                      class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 font-mono text-[11px] text-slate-200 placeholder-slate-600 focus:border-cyan-500 focus:outline-none transition leading-relaxed">{{ google_service_account_json }}</textarea>
+            <p class="text-[11px] text-slate-500 mt-1">
+                从 Google Cloud Console 下载的完整 JSON 凭据字符串，用于 URL Inspection 质检与 Indexing API 推送。
+            </p>
         </div>
 
-        <div class="pt-4 border-t border-slate-800 flex justify-between items-center">
-            <a href="/settings" class="text-xs text-slate-400 hover:text-white">清空表单（新建站点）</a>
-            <button type="submit" class="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition active:scale-95 shadow-md">
+        <!-- 底部提交栏 -->
+        <div class="pt-4 border-t border-slate-800/80 flex items-center justify-end">
+            <button type="submit" 
+                    class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-semibold text-xs transition active:scale-95 shadow-lg shadow-cyan-500/20 cursor-pointer">
                 保存站点配置
             </button>
         </div>

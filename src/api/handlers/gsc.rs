@@ -26,12 +26,14 @@ pub struct GscTemplate {
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
     pub is_gsc_running: bool,
+    pub is_quota_exhausted: bool, // 核心新增：是否配额耗尽
 }
 
 #[derive(Template)]
 #[template(path = "partials/gsc_action.html")]
 pub struct GscActionTemplate {
     pub is_gsc_running: bool,
+    pub is_quota_exhausted: bool, // 核心新增：是否配额耗尽
     pub current_site_id: i64,
 }
 
@@ -49,6 +51,8 @@ pub async fn render_gsc(
     let current_site_id = site.as_ref().map(|s| s.id).unwrap_or(1);
 
     let stats = state.site_service.dashboard_stats(current_site_id).await.unwrap_or_default();
+    let is_quota_exhausted = stats.gsc_remaining_quota() == 0;
+
     let page = q.page.unwrap_or(1).max(1);
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let (items, total) = state.url_service.list_filtered(
@@ -68,6 +72,7 @@ pub async fn render_gsc(
         all_sites,
         current_site_id,
         is_gsc_running: state.site_service.is_gsc_running.load(Ordering::Relaxed),
+        is_quota_exhausted,
     }, set_cookie).into_response()
 }
 
@@ -75,10 +80,15 @@ pub async fn render_gsc_action(
     State(state): State<AppState>,
     Query(q): Query<QueryParams>,
 ) -> Response {
+    let site_id = q.site_id.unwrap_or(1);
+    let stats = state.site_service.dashboard_stats(site_id).await.unwrap_or_default();
     let is_gsc_running = state.site_service.is_gsc_running.load(Ordering::Relaxed);
+    let is_quota_exhausted = stats.gsc_remaining_quota() == 0;
+
     HtmlTemplate(GscActionTemplate {
         is_gsc_running,
-        current_site_id: q.site_id.unwrap_or(1),
+        is_quota_exhausted,
+        current_site_id: site_id,
     }, None).into_response()
 }
 
@@ -91,7 +101,16 @@ pub async fn action_inspect_gsc(
     render_gsc_action(State(state), Query(q)).await
 }
 
-// 核心优化：单条查询后直接就地返回刷新后的抽屉 HTML
+pub async fn action_sync_gsc_analytics(
+    State(state): State<AppState>,
+    Query(q): Query<QueryParams>,
+) -> Response {
+    let site_id = q.site_id.unwrap_or(1);
+    info!(site_id, "⚡ [Action] 用户触发【一键同步 Google 曝光收录池】");
+    let _ = state.url_service.sync_gsc_analytics(site_id).await;
+    render_gsc_action(State(state), Query(q)).await
+}
+
 pub async fn action_inspect_url_gsc(
     State(state): State<AppState>,
     Path(id): Path<i64>,

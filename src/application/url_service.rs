@@ -2,6 +2,10 @@ use crate::application::{GscService, HealthService, SubmissionService};
 use crate::domain::{ProviderKind, Url};
 use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
 use serde::Serialize;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tracing::info;
 
 #[derive(Clone)]
 pub struct UrlService {
@@ -92,12 +96,59 @@ impl UrlService {
         }))
     }
 
+    /// 【核心新增】批量并发重新质检选中的 URL
+    pub async fn batch_recheck(&self, ids: &[i64]) -> anyhow::Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+
+        info!(count = ids.len(), "🛡️ [UrlService] 正在并发批量重检选中的 URL...");
+
+        let semaphore = Arc::new(Semaphore::new(10));
+        let mut set = JoinSet::new();
+
+        for &id in ids {
+            let sem = semaphore.clone();
+            let urls_repo = self.urls.clone();
+            let health_repo = self.health.clone();
+            let health_svc = self.health_svc.clone();
+
+            set.spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+                if let Ok(Some(url)) = urls_repo.find_by_id(id).await {
+                    let gate = health_svc.check_url(&url.url).await;
+                    let _ = health_repo.insert_from_gate(url.id, &gate).await;
+                    let _ = urls_repo.persist_seo_scan(url.id, &gate).await;
+                    return true;
+                }
+                false
+            });
+        }
+
+        let mut success_count = 0;
+        while let Some(res) = set.join_next().await {
+            if let Ok(true) = res {
+                success_count += 1;
+            }
+        }
+
+        info!(success_count, "✅ [UrlService] 选中的 URL 批量重检完成并落库");
+        Ok(success_count)
+    }
+
     pub async fn inspect_gsc_now(&self, id: i64) -> anyhow::Result<bool> {
         let Some(url) = self.urls.find_by_id(id).await? else { return Ok(false); };
         let Some(site) = self.sites.find_by_id(url.site_id).await? else { return Ok(false); };
         let res = self.gsc_svc.inspect_one(&site, &url.url).await?;
         self.gsc_svc.apply_inspect_result(url.id, &res).await?;
         Ok(res.ok)
+    }
+
+    pub async fn sync_gsc_analytics(&self, site_id: i64) -> anyhow::Result<u64> {
+        let Some(site) = self.sites.find_by_id(site_id).await? else {
+            anyhow::bail!("站点资产不存在 (site_id: {})", site_id);
+        };
+        self.gsc_svc.sync_indexed_from_search_analytics(&site).await
     }
 
     pub async fn submit_now(&self, id: i64, provider: &str) -> anyhow::Result<bool> {

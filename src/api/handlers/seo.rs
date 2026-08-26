@@ -5,9 +5,11 @@ use crate::infrastructure::{DashboardStats, Site};
 use askama::Template;
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
+    Json,
 };
+use serde::Deserialize;
 use std::sync::atomic::Ordering;
 use tracing::info;
 
@@ -33,6 +35,12 @@ pub struct SeoTemplate {
 pub struct SeoActionTemplate {
     pub is_seo_running: bool,
     pub current_site_id: i64,
+}
+
+#[derive(Deserialize)]
+pub struct BatchRecheckForm {
+    #[serde(default)]
+    pub selected_ids: Vec<i64>,
 }
 
 pub async fn render_seo(
@@ -91,7 +99,22 @@ pub async fn action_audit_seo(
     render_seo_action(State(state), Query(q)).await
 }
 
-// 核心优化：单条重测后，直接就地返回刷新后的抽屉 HTML
+/// 【核心修复】使用 Json 接收选中的 ID 数组，彻底规避 Form 序列化歧义
+pub async fn action_batch_recheck_urls(
+    State(state): State<AppState>,
+    Json(form): Json<BatchRecheckForm>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    info!(count = form.selected_ids.len(), "🛡️ [Action] 用户触发【批量 URL 重新质检】");
+    let success = state.url_service.batch_recheck(&form.selected_ids).await.unwrap_or(0);
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "success": true,
+            "rechecked_count": success
+        })),
+    )
+}
+
 pub async fn action_recheck_url(
     State(state): State<AppState>,
     Path(id): Path<i64>,

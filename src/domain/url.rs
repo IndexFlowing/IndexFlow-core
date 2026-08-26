@@ -36,7 +36,7 @@ pub enum SitemapType {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Url {
     pub id: i64,
-    pub site_id: i64, // 核心新增：多站点归属
+    pub site_id: i64,
     pub url: String,
     pub url_hash: String,
     
@@ -72,6 +72,43 @@ pub struct Url {
     pub first_seen_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[allow(dead_code)]
+impl Url {
+    /// 获取友好的页面标题展示，空则回退至完整 URL
+    pub fn display_title(&self) -> &str {
+        if let Some(ref t) = self.page_title {
+            if !t.trim().is_empty() {
+                return t.as_str();
+            }
+        }
+        self.url.as_str()
+    }
+
+    pub fn is_gsc_indexed(&self) -> bool {
+        self.gsc_index_status == "INDEXED"
+    }
+
+    pub fn is_gsc_unknown(&self) -> bool {
+        self.gsc_index_status == "UNKNOWN"
+    }
+
+    pub fn is_seo_pass(&self) -> bool {
+        self.seo_status == "PASS"
+    }
+
+    pub fn is_seo_fail(&self) -> bool {
+        self.seo_status == "FAIL"
+    }
+
+    pub fn is_bing_submitted(&self) -> bool {
+        self.bing_status == "SUBMITTED"
+    }
+
+    pub fn is_google_submitted(&self) -> bool {
+        self.google_status == "SUBMITTED"
+    }
 }
 
 pub fn hash_url(url: &str) -> String {

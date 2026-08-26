@@ -1,14 +1,20 @@
 use super::handlers::{
     auth::{handle_login, handle_setup, render_login, render_setup},
     dashboard::{api_get_stats, render_dashboard, render_partial_recent_urls, render_partial_stats},
-    gsc::{action_cancel_gsc, action_inspect_gsc, action_inspect_url_gsc, render_gsc, render_gsc_action},
+    gsc::{
+        action_cancel_gsc, action_inspect_gsc, action_inspect_url_gsc,
+        action_sync_gsc_analytics, render_gsc, render_gsc_action,
+    },
     health_check,
-    seo::{action_audit_seo, action_cancel_seo, action_recheck_url, render_seo, render_seo_action},
+    seo::{
+        action_audit_seo, action_batch_recheck_urls, action_cancel_seo, action_recheck_url,
+        render_seo, render_seo_action,
+    },
     settings::{handle_delete_site, handle_save_settings, render_settings},
     sitemap::{action_cancel_sync, action_sync_sitemap, render_sitemap, render_sitemap_action},
     submit::{
-        action_cancel_submit, action_submit_all, action_submit_url_bing, action_submit_url_google,
-        render_submit, render_submit_action,
+        action_batch_submit_urls, action_cancel_submit, action_submit_all,
+        action_submit_url_bing, action_submit_url_google, render_submit, render_submit_action,
     },
     url_detail::render_url_detail_modal,
     AppState,
@@ -44,6 +50,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/actions/sync-sitemap", post(action_sync_sitemap))
         .route("/actions/cancel-sync", post(action_cancel_sync))
         .route("/actions/inspect-gsc", post(action_inspect_gsc))
+        .route("/actions/sync-gsc-analytics", post(action_sync_gsc_analytics))
         .route("/actions/cancel-gsc", post(action_cancel_gsc))
         .route("/actions/audit-seo", post(action_audit_seo))
         .route("/actions/cancel-seo", post(action_cancel_seo))
@@ -51,6 +58,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/actions/cancel-submit", post(action_cancel_submit))
         .route("/sites/:id/delete", post(handle_delete_site))
         .route("/urls/:id/recheck", post(action_recheck_url))
+        .route("/urls/batch-recheck", post(action_batch_recheck_urls))
+        .route("/urls/batch-submit", post(action_batch_submit_urls))
         .route("/urls/:id/inspect-gsc", post(action_inspect_url_gsc))
         .route("/urls/:id/submit-bing", post(action_submit_url_bing))
         .route("/urls/:id/submit-google", post(action_submit_url_google));

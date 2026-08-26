@@ -8,6 +8,49 @@ use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use tracing::warn;
 
+#[derive(Default)]
+struct XmlParseFlags {
+    pub in_image: bool,
+    pub in_video: bool,
+    pub in_news: bool,
+    pub in_news_publication: bool,
+}
+
+#[derive(Default)]
+struct XmlParseBuffers {
+    pub loc_buf: String,
+    pub lastmod_buf: String,
+    pub changefreq_buf: String,
+    pub priority_buf: String,
+    pub cur_image: SitemapImage,
+    pub cur_video: SitemapVideo,
+    pub news_pub_name: String,
+    pub news_pub_lang: String,
+    pub news_pub_date: String,
+    pub news_title: String,
+    pub news_keywords: Vec<String>,
+}
+
+impl XmlParseBuffers {
+    pub fn clear_url_buffers(&mut self) {
+        self.loc_buf.clear();
+        self.lastmod_buf.clear();
+        self.changefreq_buf.clear();
+        self.priority_buf.clear();
+        self.cur_image = SitemapImage::default();
+        self.cur_video = SitemapVideo::default();
+        self.clear_news_buffers();
+    }
+
+    pub fn clear_news_buffers(&mut self) {
+        self.news_pub_name.clear();
+        self.news_pub_lang.clear();
+        self.news_pub_date.clear();
+        self.news_title.clear();
+        self.news_keywords.clear();
+    }
+}
+
 pub fn parse_xml(xml: &str) -> ParsedSitemap {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
@@ -17,35 +60,15 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
 
     let mut in_url = false;
     let mut in_sitemap = false;
-    let mut in_image = false;
-    let mut in_video = false;
-    let mut in_news = false;
-    let mut in_news_publication = false;
+    let mut flags = XmlParseFlags::default();
+    let mut parse_buf = XmlParseBuffers::default();
 
     let mut current_tag = String::new();
-
-    // 基础缓冲
-    let mut loc_buf = String::new();
-    let mut lastmod_buf = String::new();
-    let mut changefreq_buf = String::new();
-    let mut priority_buf = String::new();
     let mut alt_links: Vec<HreflangEntry> = Vec::new();
-
-    // 扩展缓冲
     let mut images: Vec<SitemapImage> = Vec::new();
-    let mut cur_image = SitemapImage::default();
-
     let mut videos: Vec<SitemapVideo> = Vec::new();
-    let mut cur_video = SitemapVideo::default();
-
     let mut cur_news: Option<SitemapNews> = None;
-    let mut news_pub_name = String::new();
-    let mut news_pub_lang = String::new();
-    let mut news_pub_date = String::new();
-    let mut news_title = String::new();
-    let mut news_keywords = Vec::new();
 
-    // 结果集
     let mut entries: Vec<SitemapUrlEntry> = Vec::new();
     let mut index_locs: Vec<String> = Vec::new();
 
@@ -58,10 +81,7 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
                     b"sitemapindex" => is_index = true,
                     b"url" => {
                         in_url = true;
-                        loc_buf.clear();
-                        lastmod_buf.clear();
-                        changefreq_buf.clear();
-                        priority_buf.clear();
+                        parse_buf.clear_url_buffers();
                         alt_links.clear();
                         images.clear();
                         videos.clear();
@@ -69,26 +89,22 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
                     }
                     b"sitemap" => {
                         in_sitemap = true;
-                        loc_buf.clear();
+                        parse_buf.loc_buf.clear();
                     }
                     b"image" => {
-                        in_image = true;
-                        cur_image = SitemapImage::default();
+                        flags.in_image = true;
+                        parse_buf.cur_image = SitemapImage::default();
                     }
                     b"video" => {
-                        in_video = true;
-                        cur_video = SitemapVideo::default();
+                        flags.in_video = true;
+                        parse_buf.cur_video = SitemapVideo::default();
                     }
                     b"news" => {
-                        in_news = true;
-                        news_pub_name.clear();
-                        news_pub_lang.clear();
-                        news_pub_date.clear();
-                        news_title.clear();
-                        news_keywords.clear();
+                        flags.in_news = true;
+                        parse_buf.clear_news_buffers();
                     }
-                    b"publication" if in_news => {
-                        in_news_publication = true;
+                    b"publication" if flags.in_news => {
+                        flags.in_news_publication = true;
                     }
                     b"link" => {
                         if let Some(entry) = read_hreflang_link(e.attributes()) {
@@ -116,25 +132,7 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
                 if let Ok(text) = e.unescape() {
                     let s = text.trim();
                     if !s.is_empty() {
-                        handle_tag_text(
-                            &current_tag,
-                            s,
-                            in_image,
-                            in_video,
-                            in_news,
-                            in_news_publication,
-                            &mut loc_buf,
-                            &mut lastmod_buf,
-                            &mut changefreq_buf,
-                            &mut priority_buf,
-                            &mut cur_image,
-                            &mut cur_video,
-                            &mut news_pub_name,
-                            &mut news_pub_lang,
-                            &mut news_pub_date,
-                            &mut news_title,
-                            &mut news_keywords,
-                        );
+                        handle_tag_text(&current_tag, s, &flags, &mut parse_buf);
                     }
                 }
             }
@@ -142,25 +140,7 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
                 if let Ok(text) = std::str::from_utf8(&e) {
                     let s = text.trim();
                     if !s.is_empty() {
-                        handle_tag_text(
-                            &current_tag,
-                            s,
-                            in_image,
-                            in_video,
-                            in_news,
-                            in_news_publication,
-                            &mut loc_buf,
-                            &mut lastmod_buf,
-                            &mut changefreq_buf,
-                            &mut priority_buf,
-                            &mut cur_image,
-                            &mut cur_video,
-                            &mut news_pub_name,
-                            &mut news_pub_lang,
-                            &mut news_pub_date,
-                            &mut news_title,
-                            &mut news_keywords,
-                        );
+                        handle_tag_text(&current_tag, s, &flags, &mut parse_buf);
                     }
                 }
             }
@@ -168,39 +148,42 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
                 let name = e.local_name();
                 match name.as_ref() {
                     b"image" => {
-                        if in_image && !cur_image.loc.is_empty() {
-                            images.push(cur_image.clone());
+                        if flags.in_image && !parse_buf.cur_image.loc.is_empty() {
+                            images.push(parse_buf.cur_image.clone());
                         }
-                        in_image = false;
+                        flags.in_image = false;
                     }
                     b"video" => {
-                        if in_video && !cur_video.thumbnail_loc.is_empty() {
-                            videos.push(cur_video.clone());
+                        if flags.in_video && !parse_buf.cur_video.thumbnail_loc.is_empty() {
+                            videos.push(parse_buf.cur_video.clone());
                         }
-                        in_video = false;
+                        flags.in_video = false;
                     }
                     b"publication" => {
-                        in_news_publication = false;
+                        flags.in_news_publication = false;
                     }
                     b"news" => {
-                        if in_news && !news_pub_name.is_empty() && !news_title.is_empty() {
+                        if flags.in_news
+                            && !parse_buf.news_pub_name.is_empty()
+                            && !parse_buf.news_title.is_empty()
+                        {
                             cur_news = Some(SitemapNews {
-                                publication_name: news_pub_name.clone(),
-                                publication_language: news_pub_lang.clone(),
-                                publication_date: parse_datetime(&news_pub_date),
-                                title: news_title.clone(),
-                                keywords: news_keywords.clone(),
+                                publication_name: parse_buf.news_pub_name.clone(),
+                                publication_language: parse_buf.news_pub_lang.clone(),
+                                publication_date: parse_datetime(&parse_buf.news_pub_date),
+                                title: parse_buf.news_title.clone(),
+                                keywords: parse_buf.news_keywords.clone(),
                             });
                         }
-                        in_news = false;
+                        flags.in_news = false;
                     }
                     b"url" => {
-                        if in_url && !loc_buf.is_empty() {
+                        if in_url && !parse_buf.loc_buf.is_empty() {
                             entries.push(SitemapUrlEntry {
-                                loc: loc_buf.clone(),
-                                lastmod: parse_datetime(&lastmod_buf),
-                                changefreq: ChangeFreq::from_str_loose(&changefreq_buf),
-                                priority: parse_priority(&priority_buf),
+                                loc: parse_buf.loc_buf.clone(),
+                                lastmod: parse_datetime(&parse_buf.lastmod_buf),
+                                changefreq: ChangeFreq::from_str_loose(&parse_buf.changefreq_buf),
+                                priority: parse_priority(&parse_buf.priority_buf),
                                 hreflangs: alt_links.clone(),
                                 images: images.clone(),
                                 videos: videos.clone(),
@@ -210,8 +193,8 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
                         in_url = false;
                     }
                     b"sitemap" => {
-                        if in_sitemap && !loc_buf.is_empty() {
-                            index_locs.push(loc_buf.clone());
+                        if in_sitemap && !parse_buf.loc_buf.is_empty() {
+                            index_locs.push(parse_buf.loc_buf.clone());
                         }
                         in_sitemap = false;
                     }
@@ -242,81 +225,67 @@ pub fn parse_xml(xml: &str) -> ParsedSitemap {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_tag_text(
     tag: &str,
     text: &str,
-    in_image: bool,
-    in_video: bool,
-    in_news: bool,
-    in_news_pub: bool,
-    loc_buf: &mut String,
-    lastmod_buf: &mut String,
-    changefreq_buf: &mut String,
-    priority_buf: &mut String,
-    cur_image: &mut SitemapImage,
-    cur_video: &mut SitemapVideo,
-    news_pub_name: &mut String,
-    news_pub_lang: &mut String,
-    news_pub_date: &mut String,
-    news_title: &mut String,
-    news_keywords: &mut Vec<String>,
+    flags: &XmlParseFlags,
+    buf: &mut XmlParseBuffers,
 ) {
-    if in_image {
+    if flags.in_image {
         match tag {
-            "loc" => cur_image.loc = text.to_string(),
-            "title" => cur_image.title = Some(text.to_string()),
-            "caption" => cur_image.caption = Some(text.to_string()),
-            "geo_location" => cur_image.geo_location = Some(text.to_string()),
-            "license" => cur_image.license = Some(text.to_string()),
+            "loc" => buf.cur_image.loc = text.to_string(),
+            "title" => buf.cur_image.title = Some(text.to_string()),
+            "caption" => buf.cur_image.caption = Some(text.to_string()),
+            "geo_location" => buf.cur_image.geo_location = Some(text.to_string()),
+            "license" => buf.cur_image.license = Some(text.to_string()),
             _ => {}
         }
-    } else if in_video {
+    } else if flags.in_video {
         match tag {
-            "thumbnail_loc" => cur_video.thumbnail_loc = text.to_string(),
-            "title" => cur_video.title = text.to_string(),
-            "description" => cur_video.description = text.to_string(),
-            "content_loc" => cur_video.content_loc = Some(text.to_string()),
-            "player_loc" => cur_video.player_loc = Some(text.to_string()),
-            "duration" => cur_video.duration_seconds = text.parse().ok(),
-            "view_count" => cur_video.view_count = text.parse().ok(),
-            "rating" => cur_video.rating = text.parse().ok(),
-            "publication_date" => cur_video.publication_date = parse_datetime(text),
-            "expiration_date" => cur_video.expiration_date = parse_datetime(text),
+            "thumbnail_loc" => buf.cur_video.thumbnail_loc = text.to_string(),
+            "title" => buf.cur_video.title = text.to_string(),
+            "description" => buf.cur_video.description = text.to_string(),
+            "content_loc" => buf.cur_video.content_loc = Some(text.to_string()),
+            "player_loc" => buf.cur_video.player_loc = Some(text.to_string()),
+            "duration" => buf.cur_video.duration_seconds = text.parse().ok(),
+            "view_count" => buf.cur_video.view_count = text.parse().ok(),
+            "rating" => buf.cur_video.rating = text.parse().ok(),
+            "publication_date" => buf.cur_video.publication_date = parse_datetime(text),
+            "expiration_date" => buf.cur_video.expiration_date = parse_datetime(text),
             "family_friendly" => {
-                cur_video.family_friendly = match text.to_ascii_lowercase().as_str() {
+                buf.cur_video.family_friendly = match text.to_ascii_lowercase().as_str() {
                     "yes" | "true" | "1" => Some(true),
                     "no" | "false" | "0" => Some(false),
                     _ => None,
                 }
             }
-            "tag" => cur_video.tags.push(text.to_string()),
-            "category" => cur_video.category = Some(text.to_string()),
+            "tag" => buf.cur_video.tags.push(text.to_string()),
+            "category" => buf.cur_video.category = Some(text.to_string()),
             _ => {}
         }
-    } else if in_news {
-        if in_news_pub {
+    } else if flags.in_news {
+        if flags.in_news_publication {
             match tag {
-                "name" => *news_pub_name = text.to_string(),
-                "language" => *news_pub_lang = text.to_string(),
+                "name" => buf.news_pub_name = text.to_string(),
+                "language" => buf.news_pub_lang = text.to_string(),
                 _ => {}
             }
         } else {
             match tag {
-                "publication_date" => *news_pub_date = text.to_string(),
-                "title" => *news_title = text.to_string(),
+                "publication_date" => buf.news_pub_date = text.to_string(),
+                "title" => buf.news_title = text.to_string(),
                 "keywords" => {
-                    news_keywords.extend(text.split(',').map(|s| s.trim().to_string()));
+                    buf.news_keywords.extend(text.split(',').map(|s| s.trim().to_string()));
                 }
                 _ => {}
             }
         }
     } else {
         match tag {
-            "loc" => *loc_buf = text.to_string(),
-            "lastmod" => *lastmod_buf = text.to_string(),
-            "changefreq" => *changefreq_buf = text.to_string(),
-            "priority" => *priority_buf = text.to_string(),
+            "loc" => buf.loc_buf = text.to_string(),
+            "lastmod" => buf.lastmod_buf = text.to_string(),
+            "changefreq" => buf.changefreq_buf = text.to_string(),
+            "priority" => buf.priority_buf = text.to_string(),
             _ => {}
         }
     }

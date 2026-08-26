@@ -1,78 +1,176 @@
 {% extends "base.html" %}
 
-{% block title %}搜索引擎提交 - IndexFlow{% endblock %}
+{% block title %}搜索引擎官方推送流水线 - IndexFlow{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-xl">
+<div class="space-y-5">
+    
+    <!-- 1. 顶部状态横幅 -->
+    <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="space-y-1.5">
-            <h2 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                <span>🚀</span> 搜索引擎官方 API 提交流水线
-            </h2>
-            <div class="flex items-center gap-3 text-xs">
-                <span class="text-sky-400 font-semibold">Bing IndexNow (秒级推送)</span>
-                <span class="text-slate-600">·</span>
-                <span class="text-emerald-400 font-semibold">Google Indexing API (每日配额)</span>
+            <div class="flex items-center gap-2.5">
+                <span class="text-lg">🚀</span>
+                <h2 class="text-base font-bold text-white tracking-tight">搜索引擎官方 API 自动化推送流水线</h2>
+                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">Active Push</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
+                <span class="text-sky-400 font-semibold">⚡ Bing IndexNow (秒级)</span>
+                <span class="text-slate-700">|</span>
+                <span class="text-emerald-400 font-semibold">🚀 Google Indexing API</span>
+                <span class="text-slate-700">|</span>
+                <span>门禁准许推送: <b class="text-cyan-300">{{ stats.pending_submit }} 条</b></span>
             </div>
         </div>
         
-        <!-- 嵌入 Submit 自感应响应式按钮 -->
-        {% include "partials/submit_action.html" %}
+        <!-- 右侧增量推送控制按钮 -->
+        <div class="shrink-0">
+            {% include "partials/submit_action.html" %}
+        </div>
     </div>
 
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4 p-6">
-        <form method="GET" action="/submit" class="flex flex-wrap items-center justify-between gap-4">
-            <input type="hidden" name="site_id" value="{{ current_site_id }}">
-            <div class="flex flex-wrap items-center gap-3">
-                <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL..." 
-                       class="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
-                
-                <select name="status" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:border-cyan-500 focus:outline-none">
-                    <option value="">全部提交状态</option>
-                    <option value="SUBMITTED" {% if filter_status.as_deref() == Some("SUBMITTED") %}selected{% endif %}>✓ 已提交 (SUBMITTED)</option>
-                    <option value="NONE" {% if filter_status.as_deref() == Some("NONE") %}selected{% endif %}>未提交 (NONE)</option>
-                    <option value="FAILED" {% if filter_status.as_deref() == Some("FAILED") %}selected{% endif %}>✗ 失败 (FAILED)</option>
-                </select>
-                <button type="submit" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition">筛选</button>
+    <!-- 2. 表格与工具栏一体化容器 -->
+    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl relative">
+        
+        <!-- 批量操作浮动提示栏 (勾选时自动滑出) -->
+        <div id="submit-batch-bar" class="hidden px-5 py-2.5 bg-sky-950/90 border-b border-sky-500/30 flex items-center justify-between transition-all duration-200">
+            <div class="flex items-center gap-2 text-xs text-sky-200">
+                <span>⚡</span>
+                <span>已选中 <b id="submit-selected-count" class="text-white font-mono text-sm">0</b> 个网页</span>
             </div>
-        </form>
+            <div class="flex items-center gap-2">
+                <button onclick="clearAllSubmitSelection()" class="px-3 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-xs text-slate-300 transition cursor-pointer">
+                    取消选择
+                </button>
+                <button onclick="submitBatchEngine('bing', this)"
+                        class="px-3.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-sky-950/40 flex items-center gap-1.5 cursor-pointer">
+                    <span>⚡</span> 批量推送到 Bing
+                </button>
+                <button onclick="submitBatchEngine('google', this)"
+                        class="px-3.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-indigo-950/40 flex items-center gap-1.5 cursor-pointer">
+                    <span>🚀</span> 批量推送到 Google
+                </button>
+            </div>
+        </div>
 
-        <div class="overflow-x-auto border border-slate-800 rounded-xl">
-            <table class="w-full text-left text-xs divide-y divide-slate-800">
-                <thead class="bg-slate-950/60 uppercase text-slate-400 font-semibold tracking-wider">
+        <!-- 单行紧凑工具栏 (Toolbar) -->
+        <div class="px-4 py-3 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
+            
+            <!-- 左侧：单行分段控制器 -->
+            <div class="inline-flex items-center p-1 rounded-xl bg-slate-950 border border-slate-800/80 text-xs">
+                <!-- 全部 -->
+                <a href="?site_id={{ current_site_id }}" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap {% if filter_status.is_none() || filter_status.as_deref() == Some("") %}bg-slate-800 text-white font-semibold shadow-sm{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    全部台账
+                </a>
+
+                <!-- 已推送 -->
+                <a href="?site_id={{ current_site_id }}&status=SUBMITTED" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("SUBMITTED") %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold{% else %}text-slate-400 hover:text-emerald-400{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    已推送
+                </a>
+
+                <!-- 待推送 -->
+                <a href="?site_id={{ current_site_id }}&status=NONE" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("NONE") %}bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold{% else %}text-slate-400 hover:text-sky-400{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                    待推送 <span class="font-mono text-[11px]">{{ stats.pending_submit }}</span>
+                </a>
+
+                <!-- 失败 -->
+                <a href="?site_id={{ current_site_id }}&status=FAILED" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("FAILED") %}bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold{% else %}text-slate-400 hover:text-rose-400{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                    失败待重试
+                </a>
+            </div>
+
+            <!-- 右侧：搜索框 -->
+            <form method="GET" action="/submit" class="flex items-center gap-2">
+                <input type="hidden" name="site_id" value="{{ current_site_id }}">
+                {% if let Some(st) = filter_status %}<input type="hidden" name="status" value="{{ st }}">{% endif %}
+
+                <div class="relative">
+                    <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL / 标题..." 
+                           class="h-8 w-48 sm:w-60 rounded-xl border border-slate-800 bg-slate-950 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 hover:border-slate-700 focus:border-cyan-500/50 focus:outline-none transition">
+                    <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-xs p-1">
+                        ⏎
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 3. 数据表格区 -->
+        {% if items.is_empty() %}
+        <div class="py-16 text-center space-y-2.5">
+            <div class="text-3xl opacity-60">🚀</div>
+            <div class="text-xs font-semibold text-slate-300">暂未发现匹配的推送记录</div>
+            <p class="text-[11px] text-slate-500 max-w-xs mx-auto">请点击右上角「启动全引擎增量提交」将合规页面推向搜索引擎</p>
+            <a href="?site_id={{ current_site_id }}" class="inline-block text-xs text-cyan-400 hover:text-cyan-300 pt-1">查看全部记录 &rarr;</a>
+        </div>
+        {% else %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs divide-y divide-slate-800/80">
+                <thead class="bg-slate-950/70 uppercase text-[10px] text-slate-400 font-semibold tracking-wider">
                     <tr>
-                        <th class="px-6 py-3.5">页面 URL / 标题</th>
-                        <th class="px-6 py-3.5">Bing IndexNow 状态</th>
-                        <th class="px-6 py-3.5">Google Indexing 状态</th>
-                        <th class="px-6 py-3.5">Bing 提交时间</th>
+                        <!-- 全选 Checkbox -->
+                        <th class="pl-4 pr-2 py-3 w-10 text-center">
+                            <input type="checkbox" id="submit-select-all" onchange="toggleSelectAllSubmit(this)"
+                                   class="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+                        </th>
+                        <th class="px-4 py-3 font-medium">页面 URL / 标题</th>
+                        <th class="px-4 py-3 font-medium w-40">Bing IndexNow</th>
+                        <th class="px-4 py-3 font-medium w-40">Google API</th>
+                        <th class="px-4 py-3 font-medium w-36">Bing 提交时间</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800/60 font-mono">
+                <tbody class="divide-y divide-slate-800/40">
                     {% for url in items %}
-                    <tr hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/50 transition cursor-pointer group">
-                        <td class="px-6 py-3.5 max-w-md truncate font-sans text-slate-200 group-hover:text-cyan-400">
-                            <span>{{ url.page_title.as_deref().unwrap_or(url.url.as_str()) }}</span>
-                            <span class="text-slate-500 text-xs block truncate font-mono mt-0.5">{{ url.url }}</span>
+                    <tr id="submit-row-{{ url.id }}" hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/40 transition cursor-pointer group">
+                        <!-- 行选择 Checkbox -->
+                        <td class="pl-4 pr-2 py-3 text-center" onclick="event.stopPropagation()">
+                            <input type="checkbox" name="submit_selected_ids" value="{{ url.id }}" onchange="updateSubmitBatchBar()"
+                                   class="submit-row-checkbox w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
                         </td>
-                        <td class="px-6 py-3.5">
-                            {% if url.bing_status == "SUBMITTED" %}
-                            <span class="text-sky-400 font-semibold">✓ 已提交</span>
+
+                        <!-- URL 与 标题 -->
+                        <td class="px-4 py-3 max-w-md truncate">
+                            <span class="text-slate-200 font-medium group-hover:text-cyan-400 transition block truncate text-xs">{{ url.display_title() }}</span>
+                            <span class="text-slate-500 font-mono text-[11px] block truncate mt-0.5">{{ url.url }}</span>
+                        </td>
+
+                        <!-- Bing 状态 -->
+                        <td class="submit-cell-bing px-4 py-3 whitespace-nowrap">
+                            {% if url.is_bing_submitted() %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>已推送
+                            </span>
                             {% else if url.bing_status == "FAILED" %}
-                            <span class="text-rose-400 font-semibold">✗ 失败</span>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>推送失败
+                            </span>
                             {% else %}
-                            <span class="text-slate-500">未提交</span>
+                            <span class="text-slate-600">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-6 py-3.5">
-                            {% if url.google_status == "SUBMITTED" %}
-                            <span class="text-emerald-400 font-semibold">✓ 已提交</span>
+
+                        <!-- Google 状态 -->
+                        <td class="submit-cell-google px-4 py-3 whitespace-nowrap">
+                            {% if url.is_google_submitted() %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>已推送
+                            </span>
                             {% else if url.google_status == "FAILED" %}
-                            <span class="text-rose-400 font-semibold">✗ 失败</span>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>推送失败
+                            </span>
                             {% else %}
-                            <span class="text-slate-500">未提交</span>
+                            <span class="text-slate-600">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-6 py-3.5 text-slate-400">
+
+                        <!-- Bing 提交时间 -->
+                        <td class="px-4 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
                             {% if let Some(t) = url.bing_submitted_at %}{{ t }}{% else %}-{% endif %}
                         </td>
                     </tr>
@@ -81,17 +179,105 @@
             </table>
         </div>
 
-        <div class="flex items-center justify-between text-xs text-slate-400 pt-2">
-            <div>共 <b class="text-white">{{ total }}</b> 条记录 · 第 <b class="text-white">{{ page }}</b> / {{ (total + limit - 1) / limit }} 页</div>
-            <div class="flex items-center gap-2">
+        <!-- 4. 底部极简分页栏 -->
+        <div class="px-5 py-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 bg-slate-950/30">
+            <div>
+                共 <span class="text-slate-200 font-mono font-semibold">{{ total }}</span> 条 · 第 <span class="text-slate-200 font-mono">{{ page }}</span> / {{ (total + limit - 1) / limit }} 页
+            </div>
+            <div class="flex items-center gap-1.5">
                 {% if page > 1 %}
-                <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">上一页</a>
+                <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">上一页</a>
                 {% endif %}
                 {% if page * limit < total %}
-                <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">下一页</a>
+                <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">下一页</a>
                 {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
+
+<!-- 批量推送控制脚本与行级反馈 -->
+<script>
+    function toggleSelectAllSubmit(masterCheckbox) {
+        const checkboxes = document.querySelectorAll('.submit-row-checkbox');
+        checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        updateSubmitBatchBar();
+    }
+
+    function updateSubmitBatchBar() {
+        const selected = document.querySelectorAll('.submit-row-checkbox:checked');
+        const bar = document.getElementById('submit-batch-bar');
+        const countSpan = document.getElementById('submit-selected-count');
+        const master = document.getElementById('submit-select-all');
+
+        if (countSpan) countSpan.innerText = selected.length;
+
+        if (selected.length > 0) {
+            bar.classList.remove('hidden');
+        } else {
+            bar.classList.add('hidden');
+            if (master) master.checked = false;
+        }
+    }
+
+    function clearAllSubmitSelection() {
+        const checkboxes = document.querySelectorAll('.submit-row-checkbox');
+        checkboxes.forEach(cb => cb.checked = false);
+        const master = document.getElementById('submit-select-all');
+        if (master) master.checked = false;
+        updateSubmitBatchBar();
+    }
+
+    // 批量推送到指定的引擎 (Bing 或 Google)
+    function submitBatchEngine(provider, btn) {
+        const selectedCheckboxes = Array.from(document.querySelectorAll('.submit-row-checkbox:checked'));
+        if (selectedCheckboxes.length === 0) return;
+
+        const selectedIds = selectedCheckboxes.map(cb => parseInt(cb.value));
+
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> <span>正在推送 ${selectedIds.length} 项...</span>`;
+
+        // 逐行点亮正在推送的行级动态效果
+        selectedIds.forEach(id => {
+            const row = document.getElementById(`submit-row-${id}`);
+            if (row) {
+                const targetCell = provider === 'bing' 
+                    ? row.querySelector('.submit-cell-bing') 
+                    : row.querySelector('.submit-cell-google');
+                if (targetCell) {
+                    targetCell.innerHTML = `
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-500/20 text-sky-300 border border-sky-500/30 animate-pulse">
+                            <span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping"></span>推选中...
+                        </span>
+                    `;
+                }
+            }
+        });
+
+        fetch('/api/v1/urls/batch-submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                selected_ids: selectedIds,
+                provider: provider
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('网络异常');
+            return response.json();
+        })
+        .then(data => {
+            showToast(`🎉 成功向 ${provider.toUpperCase()} 推送了 ${data.submitted_count || selectedIds.length} 个网页！`);
+            setTimeout(() => location.reload(), 800);
+        })
+        .catch(err => {
+            showToast('批量推送失败，请查看控制台日志', true);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+</script>
 {% endblock %}

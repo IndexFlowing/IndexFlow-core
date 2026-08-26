@@ -1,92 +1,187 @@
 {% extends "base.html" %}
 
-{% block title %}技术 SEO 质检 - IndexFlow{% endblock %}
+{% block title %}技术 SEO 质量门禁 - IndexFlow{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <!-- 顶部状态卡片：包含扫描覆盖率与最近扫描时间 -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-xl">
-        <div class="space-y-2">
-            <h2 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                <span>🛡️</span> 本地技术 SEO 质量门禁
-            </h2>
-            
-            <div class="flex flex-wrap items-center gap-3 text-xs">
-                <!-- 已质检进度 -->
-                <span class="bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 font-mono">
-                    <span class="text-amber-400 font-semibold">已质检网页数:</span>
-                    <b class="text-white">{{ stats.seo_passed + stats.seo_issues }}</b> / {{ stats.url_total }}
-                    <span class="text-slate-500">(待质检 {{ stats.url_total - (stats.seo_passed + stats.seo_issues) }})</span>
-                </span>
-
-                <span class="text-emerald-400 font-semibold">✓ 正常通过: {{ stats.seo_passed }}</span>
-                <span class="text-slate-600">·</span>
-                <span class="text-rose-400 font-semibold">✗ 拦截异常: {{ stats.seo_issues }}</span>
-                <span class="text-slate-600">·</span>
-
-                <!-- 最近扫描时间 -->
-                <span class="text-slate-400 font-mono">
-                    最近扫描时间: <span class="text-slate-200">{% if let Some(t) = stats.last_seo_scan_at %}{{ t }}{% else %}未扫描{% endif %}</span>
-                </span>
+<div class="space-y-5">
+    
+    <!-- 1. 顶部状态横幅 -->
+    <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="space-y-1.5">
+            <div class="flex items-center gap-2.5">
+                <span class="text-lg">🛡️</span>
+                <h2 class="text-base font-bold text-white tracking-tight">本地技术 SEO 质量拦截门禁</h2>
+                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">Pre-flight Gate</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
+                <span>质检进度:</span>
+                <span class="text-white font-bold">{{ stats.audited_total() }} / {{ stats.url_total }}</span>
+                <span class="text-slate-500">(待质检 {{ stats.pending_seo_audit() }})</span>
+                <span class="text-slate-700">|</span>
+                <span>正常通过: <b class="text-emerald-400">{{ stats.seo_passed }}</b></span>
+                <span class="text-slate-700">|</span>
+                <span>质量拦截: <b class="text-rose-400">{{ stats.seo_issues }}</b></span>
+                <span class="text-slate-700">|</span>
+                <span>健康度: <b class="text-white">{{ stats.seo_health_score() }} 分</b></span>
             </div>
         </div>
         
-        <!-- 嵌入 SEO 自感应开关按钮 -->
-        {% include "partials/seo_action.html" %}
+        <!-- 右侧增量质检控制按钮 -->
+        <div class="shrink-0">
+            {% include "partials/seo_action.html" %}
+        </div>
     </div>
 
-    <!-- 筛选与数据列表 -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-4 p-6">
-        <form method="GET" action="/seo" class="flex flex-wrap items-center justify-between gap-4">
-            <input type="hidden" name="site_id" value="{{ current_site_id }}">
-            <div class="flex flex-wrap items-center gap-3">
-                <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL / 标题..." 
-                       class="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
-                
-                <select name="status" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:border-cyan-500 focus:outline-none">
-                    <option value="">全部质检状态</option>
-                    <option value="PASS" {% if filter_status.as_deref() == Some("PASS") %}selected{% endif %}>✓ 正常通过 (PASS)</option>
-                    <option value="FAIL" {% if filter_status.as_deref() == Some("FAIL") %}selected{% endif %}>✗ 拦截异常 (FAIL)</option>
-                    <option value="PENDING" {% if filter_status.as_deref() == Some("PENDING") %}selected{% endif %}>待检测 (PENDING)</option>
-                </select>
-                <button type="submit" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 transition">筛选</button>
+    <!-- 2. 表格与工具栏一体化容器 -->
+    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl relative">
+        
+        <!-- 批量操作浮动提示栏 (勾选时自动滑出) -->
+        <div id="seo-batch-bar" class="hidden px-5 py-2.5 bg-amber-950/90 border-b border-amber-500/30 flex items-center justify-between transition-all duration-200">
+            <div class="flex items-center gap-2 text-xs text-amber-200">
+                <span>⚡</span>
+                <span>已选中 <b id="seo-selected-count" class="text-white font-mono text-sm">0</b> 个网页</span>
             </div>
-        </form>
+            <div class="flex items-center gap-2">
+                <button onclick="clearAllSeoSelection()" class="px-3 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-xs text-slate-300 transition cursor-pointer">
+                    取消选择
+                </button>
+                <button id="seo-batch-submit-btn"
+                        onclick="submitSeoBatchRecheck(this)"
+                        class="px-3.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-amber-950/40 flex items-center gap-1.5 cursor-pointer">
+                    <span>🛡️</span> 批量重新质检
+                </button>
+            </div>
+        </div>
 
-        <div class="overflow-x-auto border border-slate-800 rounded-xl">
-            <table class="w-full text-left text-xs divide-y divide-slate-800">
-                <thead class="bg-slate-950/60 uppercase text-slate-400 font-semibold tracking-wider">
+        <!-- 单行紧凑工具栏 (Toolbar) -->
+        <div class="px-4 py-3 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
+            
+            <!-- 左侧：单行分段控制器 -->
+            <div class="inline-flex items-center p-1 rounded-xl bg-slate-950 border border-slate-800/80 text-xs">
+                <!-- 全部 -->
+                <a href="?site_id={{ current_site_id }}" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap {% if filter_status.is_none() || filter_status.as_deref() == Some("") %}bg-slate-800 text-white font-semibold shadow-sm{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    全部 <span class="ml-1 opacity-60 font-mono text-[11px]">{{ stats.url_total }}</span>
+                </a>
+
+                <!-- 正常通过 -->
+                <a href="?site_id={{ current_site_id }}&status=PASS" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("PASS") %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold{% else %}text-slate-400 hover:text-emerald-400{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    正常通过 <span class="font-mono text-[11px]">{{ stats.seo_passed }}</span>
+                </a>
+
+                <!-- 质量拦截 -->
+                <a href="?site_id={{ current_site_id }}&status=FAIL" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("FAIL") %}bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold{% else %}text-slate-400 hover:text-rose-400{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                    异常拦截 <span class="font-mono text-[11px]">{{ stats.seo_issues }}</span>
+                </a>
+
+                <!-- 待质检 -->
+                <a href="?site_id={{ current_site_id }}&status=PENDING" 
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("PENDING") %}bg-slate-800 text-slate-200 font-semibold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                    待质检 <span class="font-mono text-[11px]">{{ stats.pending_seo_audit() }}</span>
+                </a>
+            </div>
+
+            <!-- 右侧：搜索框 -->
+            <form method="GET" action="/seo" class="flex items-center gap-2">
+                <input type="hidden" name="site_id" value="{{ current_site_id }}">
+                {% if let Some(st) = filter_status %}<input type="hidden" name="status" value="{{ st }}">{% endif %}
+
+                <div class="relative">
+                    <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL / 标题..." 
+                           class="h-8 w-48 sm:w-60 rounded-xl border border-slate-800 bg-slate-950 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 hover:border-slate-700 focus:border-cyan-500/50 focus:outline-none transition">
+                    <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-xs p-1">
+                        ⏎
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 3. 数据表格区 -->
+        {% if items.is_empty() %}
+        <div class="py-16 text-center space-y-2.5">
+            <div class="text-3xl opacity-60">🎉</div>
+            <div class="text-xs font-semibold text-slate-300">
+                {% if filter_status.as_deref() == Some("FAIL") %}
+                太棒了！当前没有任何技术 SEO 拦截项
+                {% else %}
+                未检索到匹配的页面记录
+                {% endif %}
+            </div>
+            <p class="text-[11px] text-slate-500 max-w-xs mx-auto">全站页面技术 SEO 标签完备，未发现死链或阻断</p>
+            <a href="?site_id={{ current_site_id }}" class="inline-block text-xs text-cyan-400 hover:text-cyan-300 pt-1">查看全部页面 &rarr;</a>
+        </div>
+        {% else %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs divide-y divide-slate-800/80">
+                <thead class="bg-slate-950/60 uppercase text-[10px] text-slate-400 font-semibold tracking-wider">
                     <tr>
-                        <th class="px-6 py-3.5">页面 URL / 标题</th>
-                        <th class="px-6 py-3.5">HTTP 状态</th>
-                        <th class="px-6 py-3.5">门禁判定</th>
-                        <th class="px-6 py-3.5">拦截原因明细</th>
-                        <th class="px-6 py-3.5">质检扫描时间</th>
+                        <!-- 全选 Checkbox -->
+                        <th class="pl-4 pr-2 py-3 w-10 text-center">
+                            <input type="checkbox" id="seo-select-all" onchange="toggleSelectAllSeo(this)"
+                                   class="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+                        </th>
+                        <th class="px-4 py-3 font-medium">页面 URL / 标题</th>
+                        <th class="px-4 py-3 font-medium w-28">HTTP 状态</th>
+                        <th class="px-4 py-3 font-medium w-36">门禁判定</th>
+                        <th class="px-4 py-3 font-medium w-56">拦截原因明细</th>
+                        <th class="px-4 py-3 font-medium w-36">质检扫描时间</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800/60 font-mono">
+                <tbody class="divide-y divide-slate-800/40">
                     {% for url in items %}
-                    <tr hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/50 transition cursor-pointer group">
-                        <td class="px-6 py-3.5 max-w-md truncate font-sans text-slate-200 group-hover:text-cyan-400">
-                            <span>{{ url.page_title.as_deref().unwrap_or(url.url.as_str()) }}</span>
-                            <span class="text-slate-500 text-xs block truncate font-mono mt-0.5">{{ url.url }}</span>
+                    <tr id="seo-row-{{ url.id }}" hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/40 transition cursor-pointer group">
+                        <!-- 行选择 Checkbox -->
+                        <td class="pl-4 pr-2 py-3 text-center" onclick="event.stopPropagation()">
+                            <input type="checkbox" name="selected_ids" value="{{ url.id }}" onchange="updateSeoBatchBar()"
+                                   class="seo-row-checkbox w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
                         </td>
-                        <td class="px-6 py-3.5 text-slate-300">
-                            {{ url.http_status.unwrap_or(0) }}
+
+                        <!-- URL 与 标题 -->
+                        <td class="px-4 py-3 max-w-md truncate">
+                            <span class="text-slate-200 font-medium group-hover:text-cyan-400 transition block truncate text-xs">{{ url.display_title() }}</span>
+                            <span class="text-slate-500 font-mono text-[11px] block truncate mt-0.5">{{ url.url }}</span>
                         </td>
-                        <td class="px-6 py-3.5">
-                            {% if url.seo_status == "PASS" %}
-                            <span class="text-emerald-400 font-semibold">✓ 正常通过</span>
-                            {% else if url.seo_status == "FAIL" %}
-                            <span class="text-rose-400 font-semibold">✗ 质量拦截</span>
+
+                        <!-- HTTP 状态 -->
+                        <td class="seo-cell-http px-4 py-3 font-mono text-xs whitespace-nowrap">
+                            {% if url.http_status == Some(200) %}
+                            <span class="text-emerald-400 font-semibold">200 OK</span>
+                            {% else if let Some(code) = url.http_status %}
+                            <span class="text-rose-400 font-semibold">{{ code }}</span>
                             {% else %}
-                            <span class="text-slate-500">待检测</span>
+                            <span class="text-slate-600">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-6 py-3.5 text-rose-300 font-sans">
+
+                        <!-- 门禁判定 Badge -->
+                        <td class="seo-cell-status px-4 py-3 whitespace-nowrap">
+                            {% if url.is_seo_pass() %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>正常通过
+                            </span>
+                            {% else if url.is_seo_fail() %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>质量拦截
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>待质检
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- 拦截原因明细 -->
+                        <td class="seo-cell-issue px-4 py-3 text-rose-300 font-sans text-[11px] truncate">
                             {{ url.seo_issue.as_deref().unwrap_or("-") }}
                         </td>
-                        <td class="px-6 py-3.5 text-slate-400">
+
+                        <!-- 质检时间 -->
+                        <td class="seo-cell-time px-4 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
                             {% if let Some(t) = url.last_checked_at %}{{ t }}{% else %}-{% endif %}
                         </td>
                     </tr>
@@ -95,17 +190,108 @@
             </table>
         </div>
 
-        <div class="flex items-center justify-between text-xs text-slate-400 pt-2">
-            <div>共 <b class="text-white">{{ total }}</b> 条记录 · 第 <b class="text-white">{{ page }}</b> / {{ (total + limit - 1) / limit }} 页</div>
-            <div class="flex items-center gap-2">
+        <!-- 4. 底部极简分页栏 -->
+        <div class="px-5 py-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 bg-slate-950/30">
+            <div>
+                共 <span class="text-slate-200 font-mono font-semibold">{{ total }}</span> 条 · 第 <span class="text-slate-200 font-mono">{{ page }}</span> / {{ (total + limit - 1) / limit }} 页
+            </div>
+            <div class="flex items-center gap-1.5">
                 {% if page > 1 %}
-                <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">上一页</a>
+                <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">上一页</a>
                 {% endif %}
                 {% if page * limit < total %}
-                <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition">下一页</a>
+                <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">下一页</a>
                 {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
+
+<!-- 复选框多选控制脚本与行级动态流式反馈 -->
+<script>
+    function toggleSelectAllSeo(masterCheckbox) {
+        const checkboxes = document.querySelectorAll('.seo-row-checkbox');
+        checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+        updateSeoBatchBar();
+    }
+
+    function updateSeoBatchBar() {
+        const selected = document.querySelectorAll('.seo-row-checkbox:checked');
+        const bar = document.getElementById('seo-batch-bar');
+        const countSpan = document.getElementById('seo-selected-count');
+        const master = document.getElementById('seo-select-all');
+
+        if (countSpan) countSpan.innerText = selected.length;
+
+        if (selected.length > 0) {
+            bar.classList.remove('hidden');
+        } else {
+            bar.classList.add('hidden');
+            if (master) master.checked = false;
+        }
+    }
+
+    function clearAllSeoSelection() {
+        const checkboxes = document.querySelectorAll('.seo-row-checkbox');
+        checkboxes.forEach(cb => cb.checked = false);
+        const master = document.getElementById('seo-select-all');
+        if (master) master.checked = false;
+        updateSeoBatchBar();
+    }
+
+    // 【核心升级】：行级乐观流式反馈，点击瞬间点亮选中的每一行
+    function submitSeoBatchRecheck(btn) {
+        const selectedCheckboxes = Array.from(document.querySelectorAll('.seo-row-checkbox:checked'));
+        if (selectedCheckboxes.length === 0) return;
+
+        const selectedIds = selectedCheckboxes.map(cb => parseInt(cb.value));
+
+        // 1. 禁用按钮并显示动态状态
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> <span>正在质检 ${selectedIds.length} 个网页...</span>`;
+
+        // 2. 【立即逐行乐观更新】：将选中的 35 个网页在表格中全部点亮为「⏳ 质检中...」呼吸动效！
+        selectedIds.forEach(id => {
+            const row = document.getElementById(`seo-row-${id}`);
+            if (row) {
+                const statusCell = row.querySelector('.seo-cell-status');
+                const issueCell = row.querySelector('.seo-cell-issue');
+                
+                if (statusCell) {
+                    statusCell.innerHTML = `
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>正在质检...
+                        </span>
+                    `;
+                }
+                if (issueCell) {
+                    issueCell.innerHTML = `<span class="text-amber-400/80 font-mono text-[11px]">发起网络探测与门禁比对...</span>`;
+                }
+            }
+        });
+
+        // 3. 异步发送批量请求
+        fetch('/api/v1/urls/batch-recheck', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selected_ids: selectedIds })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('网络请求异常');
+            return response.json();
+        })
+        .then(data => {
+            showToast(`🎉 成功完成 ${data.rechecked_count || selectedIds.length} 个网页的重新质检！`);
+            // 稍作停顿展示成功状态，随后平滑刷新数据
+            setTimeout(() => location.reload(), 800);
+        })
+        .catch(err => {
+            showToast('批量质检失败，请查看控制台日志', true);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+</script>
 {% endblock %}

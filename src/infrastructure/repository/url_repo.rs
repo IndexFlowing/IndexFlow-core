@@ -1,20 +1,8 @@
 use crate::domain::{
-    compute_url_priority, hash_url, QualityGateResult, SitemapUrlEntry, Url,
+    compute_url_priority, hash_url, DashboardStats, QualityGateResult, SitemapUrlEntry, Url,
 };
 use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
-
-#[derive(Debug, Clone, serde::Serialize, Default)]
-pub struct DashboardStats {
-    pub url_total: i64,
-    pub google_indexed: i64,
-    pub google_not_indexed: i64,
-    pub seo_passed: i64,                       // 新增：SEO 正常通过数
-    pub seo_issues: i64,                       // SEO 拦截数
-    pub pending_submit: i64,
-    pub gsc_used_24h: i64,
-    pub last_seo_scan_at: Option<DateTime<Utc>>, // 新增：全站最近一次质检完成时间
-}
 
 #[derive(Clone)]
 pub struct UrlRepo {
@@ -25,6 +13,10 @@ impl UrlRepo {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
+
+    // ==========================================
+    // 1. 资产发现与批量更新 (Discovery & Upsert)
+    // ==========================================
 
     pub async fn batch_upsert_discovered(
         &self,
@@ -96,18 +88,64 @@ impl UrlRepo {
         Ok((inserted_count, all_ids, new_ids))
     }
 
+    pub async fn batch_mark_gsc_indexed(
+        &self,
+        site_id: i64,
+        urls: &[String],
+    ) -> anyhow::Result<u64> {
+        if urls.is_empty() {
+            return Ok(0);
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let mut updated_total = 0u64;
+
+        for chunk in urls.chunks(500) {
+            for page_url in chunk {
+                let hash = hash_url(page_url);
+                let result = sqlx::query(
+                    r#"
+                    UPDATE urls
+                    SET
+                        gsc_index_status = 'INDEXED',
+                        gsc_coverage_state = COALESCE(gsc_coverage_state, 'Indexed (Search Analytics Confirmed)'),
+                        gsc_inspected_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE site_id = $1 AND url_hash = $2
+                    "#,
+                )
+                .bind(site_id)
+                .bind(&hash)
+                .execute(&mut *tx)
+                .await?;
+
+                updated_total += result.rows_affected();
+            }
+        }
+
+        tx.commit().await?;
+        Ok(updated_total)
+    }
+
+    // ==========================================
+    // 2. 看板统计与检索 (Queries & Stats)
+    // ==========================================
+
     /// 查询当前站点的 Dashboard 看板统计（单条条件聚合 SQL，<3ms）
     pub async fn dashboard_stats(&self, site_id: i64) -> anyhow::Result<DashboardStats> {
-        let row: (i64, i64, i64, i64, i64, i64, i64, Option<DateTime<Utc>>) = sqlx::query_as(
+        let row: (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, Option<DateTime<Utc>>) = sqlx::query_as(
             r#"
             SELECT
                 COUNT(*) AS url_total,
                 COUNT(CASE WHEN gsc_index_status = 'INDEXED' THEN 1 END) AS google_indexed,
+                COUNT(CASE WHEN gsc_index_status = 'CRAWLED_NOT_INDEXED' THEN 1 END) AS google_crawled_not_indexed,
+                COUNT(CASE WHEN gsc_index_status = 'DISCOVERED_NOT_INDEXED' THEN 1 END) AS google_discovered_not_indexed,
                 COUNT(CASE WHEN gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED') THEN 1 END) AS google_not_indexed,
+                COUNT(CASE WHEN gsc_index_status = 'UNKNOWN' THEN 1 END) AS google_uninspected,
                 COUNT(CASE WHEN seo_status = 'PASS' THEN 1 END) AS seo_passed,
                 COUNT(CASE WHEN seo_status IN ('WARN', 'FAIL') THEN 1 END) AS seo_issues,
                 COUNT(CASE WHEN (bing_status = 'NONE' OR google_status = 'NONE') AND seo_status != 'FAIL' THEN 1 END) AS pending_submit,
-                COUNT(CASE WHEN gsc_inspected_at > datetime('now', '-24 hours') THEN 1 END) AS gsc_used_24h,
+                COUNT(CASE WHEN datetime(gsc_inspected_at) > datetime('now', '-24 hours') THEN 1 END) AS gsc_used_24h,
                 MAX(last_checked_at) AS last_seo_scan_at
             FROM urls
             WHERE site_id = $1
@@ -120,12 +158,15 @@ impl UrlRepo {
         Ok(DashboardStats {
             url_total: row.0,
             google_indexed: row.1,
-            google_not_indexed: row.2,
-            seo_passed: row.3,
-            seo_issues: row.4,
-            pending_submit: row.5,
-            gsc_used_24h: row.6,
-            last_seo_scan_at: row.7,
+            google_crawled_not_indexed: row.2,
+            google_discovered_not_indexed: row.3,
+            google_not_indexed: row.4,
+            google_uninspected: row.5,
+            seo_passed: row.6,
+            seo_issues: row.7,
+            pending_submit: row.8,
+            gsc_used_24h: row.9,
+            last_seo_scan_at: row.10,
         })
     }
 
@@ -143,21 +184,32 @@ impl UrlRepo {
         let offset = (page.max(1) - 1) * limit;
         let q_pattern = query_str.map(|s| format!("%{}%", s.trim()));
 
+        let (gsc_exact, gsc_is_not_indexed) = match gsc_filter {
+            Some("NOT_INDEXED") => (None, true),
+            Some(other) if !other.is_empty() => (Some(other), false),
+            _ => (None, false),
+        };
+
         let total: (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*) FROM urls
             WHERE site_id = $1
               AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
               AND ($3 IS NULL OR seo_status = $3)
-              AND ($4 IS NULL OR gsc_index_status = $4)
-              AND ($5 IS NULL OR bing_status = $5)
-              AND ($6 IS NULL OR google_status = $6)
+              AND (
+                  ($4 IS NULL AND NOT $5)
+                  OR ($5 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
+                  OR ($4 IS NOT NULL AND gsc_index_status = $4)
+              )
+              AND ($6 IS NULL OR bing_status = $6)
+              AND ($7 IS NULL OR google_status = $7)
             "#,
         )
         .bind(site_id)
         .bind(&q_pattern)
         .bind(seo_filter)
-        .bind(gsc_filter)
+        .bind(gsc_exact)
+        .bind(gsc_is_not_indexed)
         .bind(bing_filter)
         .bind(google_filter)
         .fetch_one(&self.pool)
@@ -169,17 +221,22 @@ impl UrlRepo {
             WHERE site_id = $1
               AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
               AND ($3 IS NULL OR seo_status = $3)
-              AND ($4 IS NULL OR gsc_index_status = $4)
-              AND ($5 IS NULL OR bing_status = $5)
-              AND ($6 IS NULL OR google_status = $6)
+              AND (
+                  ($4 IS NULL AND NOT $5)
+                  OR ($5 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
+                  OR ($4 IS NOT NULL AND gsc_index_status = $4)
+              )
+              AND ($6 IS NULL OR bing_status = $6)
+              AND ($7 IS NULL OR google_status = $7)
             ORDER BY priority ASC, id DESC
-            LIMIT $7 OFFSET $8
+            LIMIT $8 OFFSET $9
             "#,
         )
         .bind(site_id)
         .bind(&q_pattern)
         .bind(seo_filter)
-        .bind(gsc_filter)
+        .bind(gsc_exact)
+        .bind(gsc_is_not_indexed)
         .bind(bing_filter)
         .bind(google_filter)
         .bind(limit)
@@ -197,6 +254,10 @@ impl UrlRepo {
             .await?;
         Ok(url)
     }
+
+    // ==========================================
+    // 3. Worker 待办队列调度 (Task Claiming)
+    // ==========================================
 
     pub async fn fetch_pending_seo(&self, limit: i64) -> anyhow::Result<Vec<Url>> {
         let rows = sqlx::query_as::<_, Url>(
@@ -260,6 +321,10 @@ impl UrlRepo {
         .await?;
         Ok(rows)
     }
+
+    // ==========================================
+    // 4. 状态持久化回写 (Mutations)
+    // ==========================================
 
     pub async fn persist_seo_scan(&self, id: i64, gate: &QualityGateResult) -> anyhow::Result<()> {
         let status = if gate.passed { "PASS" } else { "FAIL" };
