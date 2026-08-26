@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "High-performance, fault-tolerant Google-compliant Sitemap parser and crawler supporting XML, Gzip, Plain Text, Images, Videos, News, and Hreflang extensions"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/indexflow/indexflow"
+repository = "https://github.com/IndexFlowing/IndexFlow-core"
+homepage = "https://www.indexflowing.com"
+readme = "README.md"
 keywords = ["sitemap", "seo", "google", "xml", "crawler"]
 categories = ["web-programming", "parser-implementations"]
 
