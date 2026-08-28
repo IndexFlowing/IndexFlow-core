@@ -1,6 +1,6 @@
 [package]
 name = "indexflow-seo"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "High-performance Technical SEO quality gate & GEO (Generative Engine Optimization) auditor for modern search engines and AI crawlers"
 license = "MIT OR Apache-2.0"
