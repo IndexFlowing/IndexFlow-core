@@ -24,12 +24,21 @@
         
         <!-- 右侧增量推送控制按钮 -->
         <div class="shrink-0">
-            {% include "partials/submit_action.html" %}
+            <div hx-get="/partials/pipeline-action/push-submit?site_id={{ current_site_id }}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 class="h-9 w-52 rounded-xl bg-slate-800/50 animate-pulse"></div>
         </div>
     </div>
 
     <!-- 2. 表格与工具栏一体化容器 -->
-    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl relative">
+    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl relative"
+         hx-get="/submit?site_id={{ current_site_id }}&status={{ filter_status.as_deref().unwrap_or("") }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}"
+         hx-trigger="refreshTable from:body{% if is_running %}, every 2.5s{% endif %}"
+         hx-select="#submit-table-container"
+         hx-target="#submit-table-container"
+         hx-swap="outerHTML">
+        <div id="submit-table-container">
         
         <!-- 批量操作浮动提示栏 (勾选时自动滑出) -->
         <div id="submit-batch-bar" class="hidden px-5 py-2.5 bg-sky-950/90 border-b border-sky-500/30 flex items-center justify-between transition-all duration-200">
@@ -194,6 +203,7 @@
             </div>
         </div>
         {% endif %}
+        </div>
     </div>
 </div>
 

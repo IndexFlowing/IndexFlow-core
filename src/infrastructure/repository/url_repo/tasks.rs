@@ -2,7 +2,6 @@ use super::UrlRepo;
 use crate::domain::Url;
 
 impl UrlRepo {
-    /// 认领待执行技术 SEO 门禁质检的任务
     pub async fn fetch_pending_seo(&self, limit: i64) -> anyhow::Result<Vec<Url>> {
         let rows = sqlx::query_as::<_, Url>(
             r#"
@@ -18,7 +17,6 @@ impl UrlRepo {
         Ok(rows)
     }
 
-    /// 认领待向 GSC 查询真实收录状态的任务
     pub async fn fetch_pending_gsc(&self, limit: i64) -> anyhow::Result<Vec<Url>> {
         let rows = sqlx::query_as::<_, Url>(
             r#"
@@ -34,7 +32,6 @@ impl UrlRepo {
         Ok(rows)
     }
 
-    /// 认领待向 Bing Webmaster API 查询收录状态的任务
     pub async fn fetch_pending_bing_inspect(&self, limit: i64) -> anyhow::Result<Vec<Url>> {
         let rows = sqlx::query_as::<_, Url>(
             r#"
@@ -50,13 +47,14 @@ impl UrlRepo {
         Ok(rows)
     }
 
-    /// 认领待向 Bing IndexNow 推送的任务
+    /// Bing 推送队列：仅抓取「门禁通过 + Bing 尚未收录」的 URL，已收录的直接豁免！
     pub async fn fetch_pending_bing(&self, limit: i64) -> anyhow::Result<Vec<Url>> {
         let rows = sqlx::query_as::<_, Url>(
             r#"
             SELECT * FROM urls
             WHERE seo_status != 'FAIL'
               AND bing_status IN ('NONE', 'FAILED')
+              AND bing_index_status != 'INDEXED'
             ORDER BY priority ASC, id ASC
             LIMIT $1
             "#,
@@ -67,7 +65,7 @@ impl UrlRepo {
         Ok(rows)
     }
 
-    /// 认领待向 Google Indexing API 推送的任务
+    /// Google 推送队列：仅抓取「门禁通过 + Google 尚未收录」的 URL，已收录的直接豁免！
     pub async fn fetch_pending_google(&self, limit: i64) -> anyhow::Result<Vec<Url>> {
         let rows = sqlx::query_as::<_, Url>(
             r#"

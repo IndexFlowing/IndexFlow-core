@@ -21,13 +21,12 @@ impl BingService {
         let api_key = site
             .bing_webmaster_api_key
             .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("当前站点尚未配置 Bing Webmaster API Key"))?;
+            .map(str::trim)
+            .filter(|k| !k.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("当前站点尚未在【站点设置】中配置 Bing Webmaster API Key"))?;
 
-        let site_url = if site.domain.starts_with("http://") || site.domain.starts_with("https://") {
-            site.domain.clone()
-        } else {
-            format!("https://{}", site.domain.trim_end_matches('/'))
-        };
+        // 自动解析 Bing 官方登记的确切站点 URL (如 https://inkvilion.com/)
+        let site_url = self.bing.resolve_site_url(api_key, &site.domain).await?;
 
         self.bing.inspect_url(api_key, &site_url, page_url).await
     }
@@ -37,16 +36,14 @@ impl BingService {
         url_id: i64,
         result: &BingInspectResult,
     ) -> anyhow::Result<()> {
-        if result.ok {
-            self.urls
-                .apply_bing_inspection(
-                    url_id,
-                    &result.index_status,
-                    result.coverage_state.as_deref(),
-                    result.last_crawl_time,
-                )
-                .await?;
-        }
+        self.urls
+            .apply_bing_inspection(
+                url_id,
+                &result.index_status,
+                result.coverage_state.as_deref(),
+                result.last_crawl_time,
+            )
+            .await?;
         Ok(())
     }
 }

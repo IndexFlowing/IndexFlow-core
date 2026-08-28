@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}官方收录监测雷达 (Google & Bing) - IndexFlow{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    <!-- 0. 缺失 Key 友好警示 Banner -->
+    {% if !has_bing_key %}
+    <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-amber-300">
+        <div class="flex items-center gap-2.5">
+            <span class="text-base">⚠️</span>
+            <span>当前站点尚未配置 <b>Bing Webmaster API Key</b>，无法向 Bing 查询官方收录。</span>
+        </div>
+        <a href="/settings?site_id={{ current_site_id }}" class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition">
+            前往配置 Bing Key &rarr;
+        </a>
+    </div>
+    {% endif %}
+
+    {% if !has_google_key %}
+    <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-amber-300">
+        <div class="flex items-center gap-2.5">
+            <span class="text-base">⚠️</span>
+            <span>当前站点尚未配置 <b>Google Service Account 密钥</b>，无法向 Google GSC 查询官方收录。</span>
+        </div>
+        <a href="/settings?site_id={{ current_site_id }}" class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition">
+            前往配置 Google 凭据 &rarr;
+        </a>
+    </div>
+    {% endif %}
+    
+    <!-- 1. 顶部状态横幅：标题 + GSC 24h 配额温度计 -->
+    <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div class="space-y-2.5 min-w-0">
+            <div class="flex items-center gap-2.5">
+                <span class="text-lg">🔍</span>
+                <h2 class="text-base font-bold text-white tracking-tight">官方收录监测雷达</h2>
+            </div>
+            <div class="w-full max-w-xs space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <span>GSC 24h 配额</span>
+                    <span class="text-slate-200 font-semibold">{{ stats.gsc_used_24h }} / 2,000</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-2 border border-slate-800 overflow-hidden">
+                    <div class="h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-500"
+                         {{ stats.gsc_quota_style_attr()|safe }}></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧操作区：曝光池同步 + 通用流水线按钮 -->
+        <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button hx-post="/api/v1/pipeline/gsc-inspect/sync?site_id={{ current_site_id }}"
+                    hx-swap="none"
+                    hx-on::before-request="this.disabled = true; this.classList.add('opacity-50')"
+                    hx-on::after-request="this.disabled = false; this.classList.remove('opacity-50'); showToast('🎉 成功从 Google 搜索结果中批量同步已收录页面！')"
+                    class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/30 transition active:scale-95 flex items-center gap-1.5 border border-emerald-500/30 cursor-pointer">
+                <span>⚡</span> 同步 Google 曝光池
+            </button>
+            <div hx-get="/partials/pipeline-action/gsc-inspect?site_id={{ current_site_id }}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 class="h-9 w-36 rounded-xl bg-slate-800/50 animate-pulse"></div>
+            <div hx-get="/partials/pipeline-action/bing-inspect?site_id={{ current_site_id }}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML"
+                 class="h-9 w-36 rounded-xl bg-slate-800/50 animate-pulse"></div>
+        </div>
+    </div>
+
+    <!-- 2. 运行状态动态感知横幅 (Worker 运行时自动显现) -->
+    {% if is_bing_running || is_gsc_running %}
+    <div class="bg-gradient-to-r from-sky-950/60 via-slate-900 to-indigo-950/60 border border-sky-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-sky-200 animate-pulse shadow-lg">
+        <div class="flex items-center gap-3">
+            <span class="animate-spin text-base">⏳</span>
+            <span>
+                {% if is_bing_running %}
+                正在以 1.5 QPS 平滑速率向 <b>Bing Webmaster API</b> 批量查询真实收录... (待测剩余 <b class="text-white font-mono">{{ stats.bing_uninspected }}</b> 条)
+                {% else %}
+                正在向 <b>Google GSC API</b> 批量查询真实收录状态... (待测剩余 <b class="text-white font-mono">{{ stats.google_uninspected }}</b> 条)
+                {% endif %}
+            </span>
+        </div>
+        <span class="font-mono text-[11px] text-sky-400">页面实时无感自动刷新中</span>
+    </div>
+    {% endif %}
+
+    <!-- 3. 表格与工具栏一体化容器 -->
+    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl"
+         hx-get="/indexing?site_id={{ current_site_id }}&status={{ filter_status.as_deref().unwrap_or("") }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}"
+         hx-trigger="refreshTable from:body{% if is_bing_running || is_gsc_running %}, every 2.5s{% endif %}"
+         hx-select="#indexing-table-container"
+         hx-target="#indexing-table-container"
+         hx-swap="outerHTML">
+        
+        <div id="indexing-table-container">
+            <!-- 单行紧凑工具栏：将所有状态数字完美融合进可点击分段标签中 -->
+            <div class="px-4 py-3 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
+                
+                <!-- 左侧：多维分段控制器（带统计数据） -->
+                <div class="inline-flex flex-wrap items-center p-1 rounded-xl bg-slate-950 border border-slate-800/80 text-xs gap-0.5">
+                    <!-- 全部 -->
+                    <a href="?site_id={{ current_site_id }}" 
+                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap {% if filter_status.is_none() || filter_status.as_deref() == Some("") %}bg-slate-800 text-white font-semibold shadow-sm{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                        全部 <span class="ml-1 opacity-75 font-mono text-[11px]">{{ stats.url_total }}</span>
+                    </a>
+
+                    <!-- Google 已收录 -->
+                    <a href="?site_id={{ current_site_id }}&status=G_INDEXED" 
+                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("G_INDEXED") || filter_status.as_deref() == Some("INDEXED") %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold{% else %}text-slate-400 hover:text-emerald-400{% endif %}">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        Google 已编入 <span class="font-mono text-[11px]">{{ stats.google_indexed }}</span>
+                    </a>
+
+                    <!-- Bing 已收录 -->
+                    <a href="?site_id={{ current_site_id }}&status=B_INDEXED" 
+                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("B_INDEXED") %}bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold{% else %}text-slate-400 hover:text-sky-400{% endif %}">
+                        <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                        Bing 已收录 <span class="font-mono text-[11px]">{{ stats.bing_indexed }}</span>
+                    </a>
+
+                    <!-- Google 未编入 -->
+                    <a href="?site_id={{ current_site_id }}&status=NOT_INDEXED" 
+                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("NOT_INDEXED") %}bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold{% else %}text-slate-400 hover:text-rose-400{% endif %}">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                        Google 未编入 <span class="font-mono text-[11px]">{{ stats.google_not_indexed }}</span>
+                    </a>
+
+                    <!-- 待检测 -->
+                    <a href="?site_id={{ current_site_id }}&status=UNKNOWN" 
+                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("UNKNOWN") %}bg-slate-800 text-slate-200 font-semibold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                        <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                        待检测
+                    </a>
+                </div>
+
+                <!-- 右侧：搜索框 -->
+                <form method="GET" action="/indexing" class="flex items-center gap-2">
+                    <input type="hidden" name="site_id" value="{{ current_site_id }}">
+                    {% if let Some(st) = filter_status %}<input type="hidden" name="status" value="{{ st }}">{% endif %}
+
+                    <div class="relative">
+                        <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL / 标题..." 
+                               class="h-8 w-44 sm:w-56 rounded-xl border border-slate-800 bg-slate-950 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 hover:border-slate-700 focus:border-cyan-500/50 focus:outline-none transition">
+                        <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-xs p-1">
+                            ⏎
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 数据表格 -->
+            {% if items.is_empty() %}
+            <div class="py-16 text-center space-y-2.5">
+                <div class="text-3xl opacity-60">🔍</div>
+                <div class="text-xs font-semibold text-slate-300">未检索到匹配的官方收录记录</div>
+                <p class="text-[11px] text-slate-500 max-w-xs mx-auto">请点击右上角按钮运行 GSC / Bing 增量收录检测</p>
+                <a href="?site_id={{ current_site_id }}" class="inline-block text-xs text-cyan-400 hover:text-cyan-300 pt-1">清空筛选 &rarr;</a>
+            </div>
+            {% else %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs divide-y divide-slate-800/80">
+                    <thead class="bg-slate-950/60 uppercase text-[10px] text-slate-400 font-semibold tracking-wider">
+                        <tr>
+                            <th class="px-5 py-3 font-medium">页面 URL / 标题</th>
+                            <th class="px-5 py-3 font-medium w-40">Google 官方状态</th>
+                            <th class="px-5 py-3 font-medium w-40">Bing 官方状态</th>
+                            <th class="px-5 py-3 font-medium w-64">Bing 诊断明细</th>
+                            <th class="px-5 py-3 font-medium w-36">Bing 爬取时间</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/40">
+                        {% for url in items %}
+                        <tr hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/40 transition cursor-pointer group">
+                            <!-- URL 与 标题 -->
+                            <td class="px-5 py-3 max-w-xs truncate">
+                                <span class="text-slate-200 font-medium group-hover:text-cyan-400 transition block truncate text-xs">{{ url.display_title() }}</span>
+                                <span class="text-slate-500 font-mono text-[11px] block truncate mt-0.5">{{ url.url }}</span>
+                            </td>
+
+                            <!-- Google 状态 -->
+                            <td class="px-5 py-3 whitespace-nowrap">
+                                {% if url.gsc_index_status == "INDEXED" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>已编入
+                                </span>
+                                {% else if url.gsc_index_status == "CRAWLED_NOT_INDEXED" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>抓取未编入
+                                </span>
+                                {% else if url.gsc_index_status == "DISCOVERED_NOT_INDEXED" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>待抓取
+                                </span>
+                                {% else if url.gsc_index_status == "UNKNOWN" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-500 border border-slate-700">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>未检测
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>未收录
+                                </span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Bing 状态 -->
+                            <td class="px-5 py-3 whitespace-nowrap">
+                                {% if url.bing_index_status == "INDEXED" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>Bing 已收录
+                                </span>
+                                {% else if url.bing_index_status == "FAILED" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>检测异常
+                                </span>
+                                {% else if url.bing_index_status == "UNKNOWN" %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-500 border border-slate-700">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>未检测
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>Bing 未收录
+                                </span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Bing 诊断明细 -->
+                            <td class="px-5 py-3 text-slate-400 text-[11px] truncate max-w-xs" title="{{ url.bing_coverage_state.as_deref().unwrap_or("") }}">
+                                {{ url.bing_coverage_state.as_deref().unwrap_or("-") }}
+                            </td>
+
+                            <!-- Bing 爬取时间 -->
+                            <td class="px-5 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                                {% if let Some(t) = url.bing_last_crawled_at %}
+                                {{ t }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页栏 -->
+            <div class="px-5 py-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 bg-slate-950/30">
+                <div>
+                    共 <span class="text-slate-200 font-mono font-semibold">{{ total }}</span> 条 · 第 <span class="text-slate-200 font-mono">{{ page }}</span> / {{ (total + limit - 1) / limit }} 页
+                </div>
+                <div class="flex items-center gap-1.5">
+                    {% if page > 1 %}
+                    <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">上一页</a>
+                    {% endif %}
+                    {% if page * limit < total %}
+                    <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">下一页</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

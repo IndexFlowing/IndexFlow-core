@@ -20,7 +20,7 @@
                         </a>
                     </h3>
                 </div>
-                <button onclick="document.getElementById('url-drawer-root').remove(); setTimeout(() => location.reload(), 200)" 
+                <button onclick="document.getElementById('url-drawer-root').remove()" 
                         class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition text-lg shrink-0"
                         title="关闭抽屉">✕</button>
             </div>
@@ -145,7 +145,7 @@
 
             <!-- 3. 抽屉底部操作栏 -->
             <div class="px-6 py-4 border-t border-slate-800/80 bg-slate-900/95 backdrop-blur flex flex-wrap items-center justify-end gap-2 text-xs shrink-0">
-                <button hx-post="/api/v1/urls/{{ url.id }}/recheck"
+                <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=seo"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
                         hx-on::after-request="showToast('已完成该 URL 重新质检！')"
@@ -153,7 +153,7 @@
                     <span>🛡️</span> SEO 质检
                 </button>
 
-                <button hx-post="/api/v1/urls/{{ url.id }}/inspect-bing"
+                <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=bing"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
                         hx-on::after-request="showToast('Bing 官方收录查询完成！')"
@@ -161,7 +161,7 @@
                     <span>⚡</span> Bing 收录检测
                 </button>
 
-                <button hx-post="/api/v1/urls/{{ url.id }}/inspect-gsc"
+                <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=google"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
                         hx-on::after-request="showToast('GSC 实时收录查询完成！')"
@@ -169,12 +169,20 @@
                     <span>🔍</span> GSC 收录检测
                 </button>
 
-                <button hx-post="/api/v1/urls/{{ url.id }}/submit-bing"
+                <button hx-post="/api/v1/urls/{{ url.id }}/submit?provider=bing"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
                         hx-on::after-request="showToast('已推送到 Bing IndexNow！')"
                         class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold transition active:scale-95 flex items-center gap-1.5 shadow-md shadow-sky-600/20">
                     <span>⚡</span> 提交 Bing
+                </button>
+
+                <button hx-post="/api/v1/urls/{{ url.id }}/submit?provider=google"
+                        hx-target="#url-drawer-root"
+                        hx-swap="outerHTML"
+                        hx-on::after-request="showToast('已推送到 Google Indexing API！')"
+                        class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition active:scale-95 flex items-center gap-1.5 shadow-md shadow-emerald-600/20">
+                    <span>🚀</span> 提交 Google
                 </button>
             </div>
 

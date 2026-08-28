@@ -3,7 +3,6 @@ use crate::domain::{DashboardStats, Url};
 use chrono::{DateTime, Utc};
 
 impl UrlRepo {
-    /// 查询站点的 5 问指标看板（单条条件聚合 SQL，<3ms）
     pub async fn dashboard_stats(&self, site_id: i64) -> anyhow::Result<DashboardStats> {
         let row: (
             i64,
@@ -31,7 +30,7 @@ impl UrlRepo {
                 COUNT(CASE WHEN gsc_index_status = 'UNKNOWN' THEN 1 END) AS google_uninspected,
                 COUNT(CASE WHEN bing_index_status = 'INDEXED' THEN 1 END) AS bing_indexed,
                 COUNT(CASE WHEN bing_index_status = 'NOT_INDEXED' THEN 1 END) AS bing_not_indexed,
-                COUNT(CASE WHEN bing_index_status = 'UNKNOWN' THEN 1 END) AS bing_uninspected,
+                COUNT(CASE WHEN bing_index_status IN ('UNKNOWN', 'FAILED') THEN 1 END) AS bing_uninspected,
                 COUNT(CASE WHEN seo_status = 'PASS' THEN 1 END) AS seo_passed,
                 COUNT(CASE WHEN seo_status IN ('WARN', 'FAIL') THEN 1 END) AS seo_issues,
                 COUNT(CASE WHEN (bing_status = 'NONE' OR google_status = 'NONE') AND seo_status != 'FAIL' THEN 1 END) AS pending_submit,
@@ -63,7 +62,7 @@ impl UrlRepo {
         })
     }
 
-    /// 多维动态条件筛选与分页列表
+    /// 【核心升级】：支持雷达全维度组合筛选
     pub async fn list_filtered(
         &self,
         site_id: i64,
@@ -71,18 +70,25 @@ impl UrlRepo {
         limit: i64,
         query_str: Option<&str>,
         seo_filter: Option<&str>,
-        gsc_filter: Option<&str>,
+        status_filter: Option<&str>,
         bing_filter: Option<&str>,
         google_filter: Option<&str>,
     ) -> anyhow::Result<(Vec<Url>, i64)> {
         let offset = (page.max(1) - 1) * limit;
         let q_pattern = query_str.map(|s| format!("%{}%", s.trim()));
 
-        let (gsc_exact, gsc_is_not_indexed) = match gsc_filter {
-            Some("NOT_INDEXED") => (None, true),
-            Some(other) if !other.is_empty() => (Some(other), false),
-            _ => (None, false),
+        // 多引擎状态过滤器
+        let (f_g_indexed, f_b_indexed, f_both_indexed, f_neither_indexed, f_not_indexed, f_unknown) = match status_filter {
+            Some("G_INDEXED") | Some("INDEXED") => (true, false, false, false, false, false),
+            Some("B_INDEXED") => (false, true, false, false, false, false),
+            Some("BOTH_INDEXED") => (false, false, true, false, false, false),
+            Some("NEITHER_INDEXED") => (false, false, false, true, false, false),
+            Some("NOT_INDEXED") => (false, false, false, false, true, false),
+            Some("UNKNOWN") => (false, false, false, false, false, true),
+            _ => (false, false, false, false, false, false),
         };
+
+        let has_filter = f_g_indexed || f_b_indexed || f_both_indexed || f_neither_indexed || f_not_indexed || f_unknown;
 
         let total: (i64,) = sqlx::query_as(
             r#"
@@ -91,19 +97,28 @@ impl UrlRepo {
               AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
               AND ($3 IS NULL OR seo_status = $3)
               AND (
-                  ($4 IS NULL AND NOT $5)
-                  OR ($5 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
-                  OR ($4 IS NOT NULL AND gsc_index_status = $4)
+                  NOT $4
+                  OR ($5 AND gsc_index_status = 'INDEXED')
+                  OR ($6 AND bing_index_status = 'INDEXED')
+                  OR ($7 AND gsc_index_status = 'INDEXED' AND bing_index_status = 'INDEXED')
+                  OR ($8 AND gsc_index_status != 'INDEXED' AND bing_index_status != 'INDEXED')
+                  OR ($9 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
+                  OR ($10 AND gsc_index_status = 'UNKNOWN' AND bing_index_status = 'UNKNOWN')
               )
-              AND ($6 IS NULL OR bing_status = $6)
-              AND ($7 IS NULL OR google_status = $7)
+              AND ($11 IS NULL OR bing_status = $11)
+              AND ($12 IS NULL OR google_status = $12)
             "#,
         )
         .bind(site_id)
         .bind(&q_pattern)
         .bind(seo_filter)
-        .bind(gsc_exact)
-        .bind(gsc_is_not_indexed)
+        .bind(has_filter)
+        .bind(f_g_indexed)
+        .bind(f_b_indexed)
+        .bind(f_both_indexed)
+        .bind(f_neither_indexed)
+        .bind(f_not_indexed)
+        .bind(f_unknown)
         .bind(bing_filter)
         .bind(google_filter)
         .fetch_one(&self.pool)
@@ -116,21 +131,30 @@ impl UrlRepo {
               AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
               AND ($3 IS NULL OR seo_status = $3)
               AND (
-                  ($4 IS NULL AND NOT $5)
-                  OR ($5 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
-                  OR ($4 IS NOT NULL AND gsc_index_status = $4)
+                  NOT $4
+                  OR ($5 AND gsc_index_status = 'INDEXED')
+                  OR ($6 AND bing_index_status = 'INDEXED')
+                  OR ($7 AND gsc_index_status = 'INDEXED' AND bing_index_status = 'INDEXED')
+                  OR ($8 AND gsc_index_status != 'INDEXED' AND bing_index_status != 'INDEXED')
+                  OR ($9 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
+                  OR ($10 AND gsc_index_status = 'UNKNOWN' AND bing_index_status = 'UNKNOWN')
               )
-              AND ($6 IS NULL OR bing_status = $6)
-              AND ($7 IS NULL OR google_status = $7)
+              AND ($11 IS NULL OR bing_status = $11)
+              AND ($12 IS NULL OR google_status = $12)
             ORDER BY priority ASC, id DESC
-            LIMIT $8 OFFSET $9
+            LIMIT $13 OFFSET $14
             "#,
         )
         .bind(site_id)
         .bind(&q_pattern)
         .bind(seo_filter)
-        .bind(gsc_exact)
-        .bind(gsc_is_not_indexed)
+        .bind(has_filter)
+        .bind(f_g_indexed)
+        .bind(f_b_indexed)
+        .bind(f_both_indexed)
+        .bind(f_neither_indexed)
+        .bind(f_not_indexed)
+        .bind(f_unknown)
         .bind(bing_filter)
         .bind(google_filter)
         .bind(limit)

@@ -1,7 +1,7 @@
-use crate::application::HealthService;
+use crate::application::{HealthService, PipelineManager};
 use crate::config::AppConfig;
+use crate::domain::PipelineStage;
 use crate::infrastructure::{HealthCheckRepo, UrlRepo};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -13,7 +13,7 @@ pub struct SeoAuditWorker {
     urls: UrlRepo,
     health_repo: HealthCheckRepo,
     health: HealthService,
-    is_running: Arc<AtomicBool>,
+    pipeline: PipelineManager,
     config: AppConfig,
 }
 
@@ -22,14 +22,14 @@ impl SeoAuditWorker {
         urls: UrlRepo,
         health_repo: HealthCheckRepo,
         health: HealthService,
-        is_running: Arc<AtomicBool>,
+        pipeline: PipelineManager,
         config: AppConfig,
     ) -> Self {
         Self {
             urls,
             health_repo,
             health,
-            is_running,
+            pipeline,
             config,
         }
     }
@@ -48,15 +48,13 @@ impl SeoAuditWorker {
     }
 
     async fn tick(&self) -> anyhow::Result<()> {
-        // 未手动启动时直接跳过，零消耗
-        if !self.is_running.load(Ordering::Relaxed) {
+        if !self.pipeline.is_running(PipelineStage::SeoGate) {
             return Ok(());
         }
 
         let pending = self.urls.fetch_pending_seo(300).await?;
         if pending.is_empty() {
-            // 全部处理完毕，自动关闭开关回到待机
-            self.is_running.store(false, Ordering::Relaxed);
+            self.pipeline.stop(PipelineStage::SeoGate);
             info!("🎉 全站 SEO 质检已全部完成，Worker 回到待机状态");
             return Ok(());
         }
@@ -67,7 +65,7 @@ impl SeoAuditWorker {
         let mut set = JoinSet::new();
 
         for url in pending {
-            if !self.is_running.load(Ordering::Relaxed) {
+            if !self.pipeline.is_running(PipelineStage::SeoGate) {
                 break;
             }
 

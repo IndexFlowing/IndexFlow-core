@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod dashboard;
-pub mod gsc;
+pub mod indexing;
+pub mod pipeline;
 pub mod seo;
 pub mod settings;
 pub mod sitemap;
@@ -25,7 +26,7 @@ pub struct AppState {
     pub url_service: Arc<UrlService>,
     pub admin_repo: Arc<AdminRepo>,
     pub jwt_secret: String,
-    pub dry_run: bool, // 核心新增
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

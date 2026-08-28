@@ -1,0 +1,31 @@
+<div id="pipeline-action-{{ stage }}"
+     data-theme="{{ color_theme }}"
+     {% if is_running %}
+     hx-get="/partials/pipeline-action/{{ stage }}?site_id={{ current_site_id }}"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+    {% if is_running %}
+    <button hx-post="/api/v1/pipeline/{{ stage }}/stop?site_id={{ current_site_id }}"
+            hx-target="#pipeline-action-{{ stage }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="showToast('已停止流水线', true)"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/30 transition active:scale-95 flex items-center gap-1.5 animate-pulse cursor-pointer">
+        <span>⏹️</span> {{ running_text }}
+    </button>
+    {% else if is_disabled %}
+    <button disabled
+            title="{{ disabled_text }}"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed flex items-center gap-1.5">
+        <span>🛑</span> {{ disabled_text }}
+    </button>
+    {% else %}
+    <button hx-post="/api/v1/pipeline/{{ stage }}/start?site_id={{ current_site_id }}"
+            hx-target="#pipeline-action-{{ stage }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="showToast('{{ idle_text }}已启动...')"
+            class="px-3.5 py-2 rounded-xl text-xs font-semibold {{ idle_class }} transition active:scale-95 flex items-center gap-1.5 cursor-pointer">
+        <span>{{ icon }}</span> {{ idle_text }}
+    </button>
+    {% endif %}
+</div>

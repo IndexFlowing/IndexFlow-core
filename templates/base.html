@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="{{ lang }}" class="h-full bg-slate-950 text-slate-100 selection:bg-cyan-500 selection:text-white">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,39 +8,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <style>
-        .htmx-indicator {
-            display: none;
-        }
-
-        .htmx-request .htmx-indicator {
-            display: inline-flex;
-        }
-
-        .htmx-request.htmx-indicator {
-            display: inline-flex;
-        }
-
-        /* 现代化细滑深色滚动条 */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #090d16;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #1e293b;
-            border-radius: 9999px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #334155;
-        }
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-flex; }
+        .htmx-request.htmx-indicator { display: inline-flex; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
     </style>
 </head>
-
 <body class="min-h-full flex flex-col font-sans bg-slate-950 text-slate-100 antialiased">
     <!-- 全局 Toast 提示挂载容器 -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none"></div>
@@ -50,10 +26,11 @@
         function showToast(message, isError = false) {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            toast.className = `px-4 py-3 rounded-2xl border text-xs font-semibold shadow-2xl flex items-center gap-2.5 transform transition-all duration-300 translate-y-2 opacity-0 pointer-events-auto backdrop-blur-xl ${isError
-                    ? 'bg-rose-950/90 border-rose-800/80 text-rose-200 shadow-rose-950/50'
-                    : 'bg-slate-900/90 border-cyan-500/40 text-cyan-300 shadow-cyan-950/50'
-                }`;
+            toast.className = `px-4 py-3 rounded-2xl border text-xs font-semibold shadow-2xl flex items-center gap-2.5 transform transition-all duration-300 translate-y-2 opacity-0 pointer-events-auto backdrop-blur-xl ${
+                isError 
+                ? 'bg-rose-950/90 border-rose-800/80 text-rose-200 shadow-rose-950/50' 
+                : 'bg-slate-900/90 border-cyan-500/40 text-cyan-300 shadow-cyan-950/50'
+            }`;
             toast.innerHTML = `<span class="text-base">${isError ? '⚠️' : '⚡'}</span><span>${message}</span>`;
             container.appendChild(toast);
 
@@ -71,53 +48,40 @@
     <!-- 通栏顶部导航栏 -->
     <header class="h-16 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
-            <!-- 左侧 Logo 与品牌名 -->
             <div class="flex items-center space-x-6">
                 <a href="/?site_id={{ current_site_id }}" class="flex items-center space-x-3 group">
-                    <img src="/static/logo.png" alt="IndexFlow Logo"
-                        onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\' fill=\'none\'><rect width=\'36\' height=\'36\' rx=\'10\' fill=\'%230066FF\'/><path d=\'M10 18L16 24L26 12\' stroke=\'white\' stroke-width=\'3\' stroke-linecap=\'round\'/></svg>'"
-                        class="h-9 w-9 rounded-xl shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform duration-200">
+                    <img src="/static/logo.png" alt="IndexFlow Logo" 
+                         onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'36\' height=\'36\' viewBox=\'0 0 36 36\' fill=\'none\'><rect width=\'36\' height=\'36\' rx=\'10\' fill=\'%230066FF\'/><path d=\'M10 18L16 24L26 12\' stroke=\'white\' stroke-width=\'3\' stroke-linecap=\'round\'/></svg>'" 
+                         class="h-9 w-9 rounded-xl shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform duration-200">
                     <div class="flex items-center gap-2">
-                        <span
-                            class="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-sky-200">
+                        <span class="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-cyan-400 to-sky-200">
                             IndexFlow
                         </span>
-                        <span
-                            class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">OpenCore</span>
+                        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">OpenCore</span>
                     </div>
                 </a>
             </div>
 
-            <!-- 右侧操作区与多语言切换 -->
-            <!-- 右侧操作区与多语言切换 -->
+            <!-- 右侧操作区与状态 -->
             <div class="flex items-center space-x-4">
                 {% if dry_run %}
-                <span
-                    class="hidden sm:inline-flex text-xs text-amber-400 font-mono items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full shadow-inner"
-                    title="演练模式：提交请求将被拦截并记录 Mock 日志，不消耗配额">
+                <span class="hidden sm:inline-flex text-xs text-amber-400 font-mono items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full shadow-inner"
+                      title="演练模式：提交请求将被拦截并记录 Mock 日志，不消耗配额">
                     <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
                     Dry-Run 安全演练模式
                 </span>
                 {% else %}
-                <span
-                    class="hidden sm:inline-flex text-xs text-emerald-400 font-mono items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full shadow-md shadow-emerald-950/40"
-                    title="生产模式：将向 Bing IndexNow 与 Google 官方 API 发起真实推送">
+                <span class="hidden sm:inline-flex text-xs text-emerald-400 font-mono items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full shadow-md shadow-emerald-950/40"
+                      title="生产模式：将向 Bing IndexNow 与 Google 官方 API 发起真实推送">
                     <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                     🚀 Live 生产真实推送
                 </span>
                 {% endif %}
 
                 <!-- 语言切换 -->
-                <div
-                    class="flex items-center rounded-xl bg-slate-950 p-1 text-xs font-semibold border border-slate-800">
-                    <a href="?lang=zh&site_id={{ current_site_id }}"
-                        class="px-2.5 py-1 rounded-lg transition {% if lang == " zh" %}bg-gradient-to-r from-blue-600
-                        to-cyan-500 text-white shadow-md shadow-cyan-500/20{% else %}text-slate-400
-                        hover:text-slate-200{% endif %}">中文</a>
-                    <a href="?lang=en&site_id={{ current_site_id }}"
-                        class="px-2.5 py-1 rounded-lg transition {% if lang == " en" %}bg-gradient-to-r from-blue-600
-                        to-cyan-500 text-white shadow-md shadow-cyan-500/20{% else %}text-slate-400
-                        hover:text-slate-200{% endif %}">EN</a>
+                <div class="flex items-center rounded-xl bg-slate-950 p-1 text-xs font-semibold border border-slate-800">
+                    <a href="?lang=zh&site_id={{ current_site_id }}" class="px-2.5 py-1 rounded-lg transition {% if lang == "zh" %}bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md shadow-cyan-500/20{% else %}text-slate-400 hover:text-slate-200{% endif %}">中文</a>
+                    <a href="?lang=en&site_id={{ current_site_id }}" class="px-2.5 py-1 rounded-lg transition {% if lang == "en" %}bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md shadow-cyan-500/20{% else %}text-slate-400 hover:text-slate-200{% endif %}">EN</a>
                 </div>
             </div>
         </div>
@@ -125,17 +89,16 @@
 
     <!-- 中间主体区域 -->
     <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-6 items-start">
-
-        <!-- 左侧业务导航侧边栏 -->
-        <aside
-            class="w-full md:w-64 bg-slate-900/90 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-4 shrink-0 shadow-2xl space-y-4 md:sticky md:top-24">
+        
+        <!-- 左侧业务导航侧边栏 (精炼 4 步时序闭环) -->
+        <aside class="w-full md:w-64 bg-slate-900/90 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-4 shrink-0 shadow-2xl space-y-4 md:sticky md:top-24">
             <div>
                 <label class="block text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">当前管理网站</label>
                 {% if all_sites.len() > 0 %}
-                <select onchange="location.href='?site_id=' + this.value"
-                    class="w-full bg-slate-950 border border-slate-700/80 hover:border-cyan-500/60 text-slate-100 text-xs font-semibold rounded-xl px-3 py-2.5 focus:border-cyan-500 focus:outline-none transition cursor-pointer">
+                <select onchange="location.href='?site_id=' + this.value" 
+                        class="w-full bg-slate-950 border border-slate-700/80 hover:border-cyan-500/60 text-slate-100 text-xs font-semibold rounded-xl px-3 py-2.5 focus:border-cyan-500 focus:outline-none transition cursor-pointer">
                     {% for s in all_sites %}
-                    <option value="{{ s.id }}" {% if current_site_id==s.id %}selected{% endif %}>
+                    <option value="{{ s.id }}" {% if current_site_id == s.id %}selected{% endif %}>
                         🌐 {{ s.domain }}
                     </option>
                     {% endfor %}
@@ -146,37 +109,41 @@
             </div>
 
             <nav class="space-y-1 text-xs font-medium border-t border-slate-800/80 pt-3">
-                <a href="/?site_id={{ current_site_id }}"
-                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                <a href="/?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                     <span class="text-base">📊</span> 全站总览 (Dashboard)
                 </a>
 
                 <div class="pt-3 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">专属流水线工作台</div>
 
-                <a href="/sitemap?site_id={{ current_site_id }}"
-                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-                    <span class="text-base">🔄</span> Sitemap 资产发现
+                <!-- 1. Sitemap 资产发现 -->
+                <a href="/sitemap?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🔄</span> 1. Sitemap 资产发现
                 </a>
 
-                <a href="/gsc?site_id={{ current_site_id }}"
-                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-                    <span class="text-base">🔍</span> GSC 官方收录检测
+                <!-- 2. 本地 SEO 质量门禁 -->
+                <a href="/seo?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🛡️</span> 2. 本地 SEO 质量门禁
                 </a>
 
-                <a href="/seo?site_id={{ current_site_id }}"
-                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-                    <span class="text-base">🛡️</span> 本地 SEO 质量门禁
+                <!-- 3. 官方收录监测雷达 (先测收录) -->
+                <a href="/indexing?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🔍</span> 3. 官方收录监测雷达
                 </a>
 
-                <a href="/submit?site_id={{ current_site_id }}"
-                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
-                    <span class="text-base">🚀</span> 搜索引擎提交流水线
+                <!-- 4. 搜索引擎提交流水线 (后精准推未收录) -->
+                <a href="/submit?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                    <span class="text-base">🚀</span> 4. 搜索引擎提交流水线
                 </a>
 
                 <div class="pt-3 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">系统管理</div>
 
-                <a href="/settings?site_id={{ current_site_id }}"
-                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
+                <a href="/settings?site_id={{ current_site_id }}" 
+                   class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                     <span class="text-base">⚙️</span> 多站点与密钥配置
                 </a>
             </nav>
@@ -189,12 +156,10 @@
     </div>
 
     <!-- 底部页脚 -->
-    <footer
-        class="border-t border-slate-900 py-6 mt-auto text-center text-xs text-slate-500 flex items-center justify-center gap-2 shrink-0">
+    <footer class="border-t border-slate-900 py-6 mt-auto text-center text-xs text-slate-500 flex items-center justify-center gap-2 shrink-0">
         <span>{{ t.footer_text }}</span>
         <span>·</span>
-        <a href="https://www.indexflowing.com" target="_blank" rel="noopener noreferrer"
-            class="text-cyan-400 hover:text-cyan-300 font-medium underline underline-offset-2 transition">
+        <a href="https://www.indexflowing.com" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 font-medium underline underline-offset-2 transition">
             Powered by IndexFlowing
         </a>
     </footer>
@@ -202,5 +167,4 @@
     <!-- 模态抽屉挂载容器 -->
     <div id="modal-container"></div>
 </body>
-
 </html>

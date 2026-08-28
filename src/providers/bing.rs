@@ -2,12 +2,16 @@ use super::{SearchProvider, SubmissionResult};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BingInspectResult {
     pub ok: bool,
     pub is_indexed: bool,
+    pub is_throttled: bool, // 核心新增：是否触发频控
     pub index_status: String,
     pub coverage_state: Option<String>,
     pub last_crawl_time: Option<DateTime<Utc>>,
@@ -19,95 +23,225 @@ pub struct BingInspectResult {
 pub struct BingProvider {
     client: reqwest::Client,
     dry_run: bool,
+    site_cache: Arc<RwLock<HashMap<String, String>>>, // 核心新增：站点 URL 内存缓存
 }
 
 impl BingProvider {
     pub fn new(client: reqwest::Client, dry_run: bool) -> Self {
-        Self { client, dry_run }
+        Self {
+            client,
+            dry_run,
+            site_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
-    /// 查询单条 URL 在 Bing 索引库的真实收录与抓取状态 (不受 dry_run 影响，始终允许检测)
+    /// 从内存缓存中获取已解析的 Bing 站点前缀，未命中时才调用 GetUserSites (单站仅查 1 次)
+    pub async fn resolve_site_url(&self, bwt_api_key: &str, domain: &str) -> anyhow::Result<String> {
+        let cache_key = format!("{}:{}", bwt_api_key.trim(), domain.trim());
+
+        // 1. 读锁检查缓存
+        {
+            let reader = self.site_cache.read().await;
+            if let Some(cached) = reader.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+
+        // 2. 缓存未命中时向 Bing 查询
+        let endpoint = format!(
+            "https://ssl.bing.com/webmaster/api.svc/json/GetUserSites?apikey={}",
+            bwt_api_key.trim()
+        );
+
+        let mut resolved_url = None;
+        if let Ok(res) = self.client.get(&endpoint).send().await {
+            if res.status().is_success() {
+                if let Ok(body) = res.json::<serde_json::Value>().await {
+                    if let Some(sites) = body.get("d").and_then(|d| d.as_array()) {
+                        let clean_target = domain.trim().trim_start_matches("www.").trim_end_matches('/');
+                        for site in sites {
+                            if let Some(url_str) = site.get("Url").and_then(|u| u.as_str()) {
+                                if url_str.contains(clean_target) {
+                                    info!(site_url = %url_str, "✅ [Bing Cache] 成功匹配并缓存 Bing 官方站点前缀");
+                                    resolved_url = Some(url_str.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let final_url = resolved_url.unwrap_or_else(|| {
+            if domain.starts_with("http://") || domain.starts_with("https://") {
+                format!("{}/", domain.trim_end_matches('/'))
+            } else {
+                format!("https://{}/", domain.trim_start_matches("www.").trim_end_matches('/'))
+            }
+        });
+
+        // 3. 写锁写入缓存
+        {
+            let mut writer = self.site_cache.write().await;
+            writer.insert(cache_key, final_url.clone());
+        }
+
+        Ok(final_url)
+    }
+
+    /// 使用 Bing 官方 GetUrlInfo 接口查询收录
     pub async fn inspect_url(
         &self,
         bwt_api_key: &str,
         site_url: &str,
         inspection_url: &str,
     ) -> anyhow::Result<BingInspectResult> {
-        let endpoint = format!(
-            "https://ssl.bing.com/webmaster/api.json/GetUrlInspection?apikey={}",
-            bwt_api_key.trim()
-        );
+        let endpoint = "https://ssl.bing.com/webmaster/api.svc/json/GetUrlInfo";
 
-        let payload = serde_json::json!({
-            "siteUrl": site_url,
-            "url": inspection_url
-        });
+        let params = [
+            ("siteUrl", site_url.trim()),
+            ("url", inspection_url.trim()),
+            ("apikey", bwt_api_key.trim()),
+        ];
 
-        let res = self
-            .client
-            .post(&endpoint)
-            .json(&payload)
-            .send()
-            .await?;
+        let res = match self.client.get(endpoint).query(&params).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(url = %inspection_url, error = %e, "Bing GetUrlInfo 网络请求失败");
+                return Ok(BingInspectResult {
+                    ok: false,
+                    is_indexed: false,
+                    is_throttled: false,
+                    index_status: "FAILED".into(),
+                    coverage_state: Some(format!("网络请求失败: {e}")),
+                    last_crawl_time: None,
+                    http_status: None,
+                    raw_response: None,
+                });
+            }
+        };
 
         let status = res.status();
         let body_text = res.text().await.unwrap_or_default();
+
+        // 捕获 Bing ErrorCode:5 / ThrottleHost 频控，退避而非永久失败
+        let is_throttled = body_text.contains("ThrottleHost")
+            || body_text.contains("\"ErrorCode\":5")
+            || status.as_u16() == 429;
+        if is_throttled {
+            warn!(url = %inspection_url, "⏳ Bing API 触发频率限制 (ThrottleHost)，将自动平滑退避");
+            return Ok(BingInspectResult {
+                ok: false,
+                is_indexed: false,
+                is_throttled: true,
+                index_status: "UNKNOWN".into(), // 保留在待测队列供退避后重试
+                coverage_state: Some("Bing 频控保护 (自动排队中)".into()),
+                last_crawl_time: None,
+                http_status: Some(status.as_u16() as i32),
+                raw_response: Some(body_text),
+            });
+        }
+
+        // 官方库无此 URL 时按未收录处理，避免把 404 当成检测异常
+        if status.as_u16() == 404 {
+            return Ok(BingInspectResult {
+                ok: true,
+                is_indexed: false,
+                is_throttled: false,
+                index_status: "NOT_INDEXED".into(),
+                coverage_state: Some("Bing 索引库暂无此页面抓取记录".into()),
+                last_crawl_time: None,
+                http_status: Some(404),
+                raw_response: Some(body_text),
+            });
+        }
 
         if !status.is_success() {
             warn!(
                 url = %inspection_url,
                 status = %status,
                 body = %body_text,
-                "Bing Webmaster URL Inspection returned non-200"
+                "⚠️ Bing API 返回非 200 响应"
             );
             return Ok(BingInspectResult {
                 ok: false,
                 is_indexed: false,
-                index_status: "UNKNOWN".into(),
-                coverage_state: Some(format!("HTTP Error {}", status.as_u16())),
+                is_throttled: false,
+                index_status: "FAILED".into(),
+                coverage_state: Some(format!("Bing API 报错 (HTTP {}): {}", status.as_u16(), body_text)),
+                last_crawl_time: None,
+                http_status: Some(status.as_u16() as i32),
+                raw_response: Some(body_text),
+            });
+        }
+
+        let parsed: serde_json::Value = match serde_json::from_str(&body_text) {
+            Ok(v) => v,
+            Err(_) => {
+                return Ok(BingInspectResult {
+                    ok: false,
+                    is_indexed: false,
+                    is_throttled: false,
+                    index_status: "FAILED".into(),
+                    coverage_state: Some(format!("解析 Bing 返回内容失败: {body_text}")),
+                    last_crawl_time: None,
+                    http_status: Some(200),
+                    raw_response: Some(body_text),
+                });
+            }
+        };
+
+        let obj = parsed.get("d");
+
+        if obj.is_none() || obj.unwrap().is_null() {
+            return Ok(BingInspectResult {
+                ok: true,
+                is_indexed: false,
+                is_throttled: false,
+                index_status: "NOT_INDEXED".to_string(),
+                coverage_state: Some("Bing 索引库暂无此页面抓取记录".into()),
                 last_crawl_time: None,
                 http_status: None,
                 raw_response: Some(body_text),
             });
         }
 
-        let parsed: serde_json::Value = serde_json::from_str(&body_text)?;
-        let result_obj = parsed.get("d").unwrap_or(&parsed);
+        let data = obj.unwrap();
 
-        let index_status_raw = result_obj
-            .get("IndexingStatus")
-            .and_then(|s| s.as_str())
-            .unwrap_or("UNKNOWN");
+        let last_crawl_time = data
+            .get("LastCrawledDate")
+            .and_then(|d| d.as_str())
+            .and_then(parse_ms_date);
 
-        let is_indexed = index_status_raw.eq_ignore_ascii_case("Indexed");
+        let is_page = data.get("IsPage").and_then(|p| p.as_bool()).unwrap_or(true);
+        let http_status = data.get("HttpStatus").and_then(|s| s.as_i64()).map(|s| s as i32);
+
+        // 核心裁决：只要有最后抓取时间，即为已收录！
+        let is_indexed = last_crawl_time.is_some();
         let index_status = if is_indexed {
             "INDEXED".to_string()
-        } else if index_status_raw.eq_ignore_ascii_case("UNKNOWN") {
-            "UNKNOWN".to_string()
         } else {
             "NOT_INDEXED".to_string()
         };
 
-        let last_crawl_time = result_obj
-            .get("LastCrawlDate")
-            .and_then(|d| d.as_str())
-            .and_then(parse_ms_date);
+        let coverage_state = if let Some(t) = last_crawl_time {
+            format!("Bingbot 已抓取 ({})", t.format("%Y-%m-%d %H:%M"))
+        } else {
+            "Bing 尚未抓取该页面".to_string()
+        };
 
-        let http_status = result_obj
-            .get("HttpStatus")
-            .and_then(|s| s.as_i64())
-            .map(|s| s as i32);
-
-        let coverage_state = format!(
-            "Status: {}, RobotsTxt: {}, NoIndex: {}",
-            index_status_raw,
-            result_obj.get("RobotsTxtStatus").and_then(|s| s.as_str()).unwrap_or("-"),
-            result_obj.get("NoIndexStatus").and_then(|s| s.as_str()).unwrap_or("-")
+        info!(
+            url = %inspection_url,
+            index_status = %index_status,
+            is_page,
+            "✅ [Bing GetUrlInfo] 成功获取 Bing 收录状态"
         );
 
         Ok(BingInspectResult {
             ok: true,
             is_indexed,
+            is_throttled: false,
             index_status,
             coverage_state: Some(coverage_state),
             last_crawl_time,
@@ -133,9 +267,6 @@ impl SearchProvider for BingProvider {
             return Ok(vec![]);
         }
 
-        // ==========================================
-        // 1. Dry-Run 演练模式分支
-        // ==========================================
         if self.dry_run {
             info!(
                 mode = "DRY_RUN (演练模式)",
@@ -155,9 +286,6 @@ impl SearchProvider for BingProvider {
                 .collect());
         }
 
-        // ==========================================
-        // 2. Live 生产真实推送分支 (IndexNow 官方协议)
-        // ==========================================
         let clean_domain = domain
             .trim()
             .trim_start_matches("https://")
@@ -187,7 +315,6 @@ impl SearchProvider for BingProvider {
             Ok(resp) => {
                 let status = resp.status().as_u16();
                 let body = resp.text().await.unwrap_or_default();
-                // IndexNow 规范: 200 (OK) 与 202 (Accepted) 均为成功状态
                 let is_success = status == 200 || status == 202;
                 let is_quota = status == 429;
 

@@ -10,10 +10,10 @@
             <div class="flex flex-wrap items-center gap-3">
                 <h2 class="text-2xl font-black text-white tracking-tight font-mono">{{ domain }}</h2>
                 {% if bing_ready %}
-                <span class="text-xs px-2.5 py-0.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">Bing IndexNow 准备就绪</span>
+                <span class="text-xs px-2.5 py-0.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">IndexNow 就绪</span>
                 {% endif %}
                 {% if google_ready %}
-                <span class="text-xs px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Google API 准备就绪</span>
+                <span class="text-xs px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Google 就绪</span>
                 {% endif %}
             </div>
             <p class="text-xs text-slate-400 font-mono flex items-center gap-1.5">
@@ -37,7 +37,7 @@
         {% include "partials/stats.html" %}
     </div>
 
-    <!-- 视觉化健康度与配额温度计 -->
+    <!-- 视觉化健康度与收录转化仪表 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- 1. SEO 质量健康度评分仪表 -->
         <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-4">
@@ -64,50 +64,50 @@
         <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-4">
             <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Google 收录转化率</span>
-                <span class="px-2 py-0.5 text-xs font-bold font-mono rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                <span class="px-2 py-0.5 text-xs font-bold font-mono rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     {{ stats.google_index_rate() }}%
                 </span>
             </div>
 
             <div class="space-y-2">
                 <div class="w-full bg-slate-950 rounded-full h-3.5 border border-slate-800 overflow-hidden p-0.5">
-                    <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-blue-600 to-cyan-400" 
+                    <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-emerald-600 to-teal-400" 
                          {{ stats.google_index_style_attr()|safe }}></div>
                 </div>
                 <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
-                    <span>已编入索引: <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b></span>
-                    <span>待抓取排队: <b class="text-rose-400 font-mono">{{ stats.google_not_indexed }}</b></span>
+                    <span>已编入: <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b></span>
+                    <span>未编入: <b class="text-rose-400 font-mono">{{ stats.google_not_indexed }}</b></span>
                 </div>
             </div>
         </div>
 
-        <!-- 3. 今日 GSC 24h 配额温度计 -->
+        <!-- 3. Bing 官方收录转化率 -->
         <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-4">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">GSC 24h 查询配额</span>
-                <span class="text-xs font-mono font-semibold text-slate-300">
-                    <b class="text-white">{{ stats.gsc_used_24h }}</b> / 2,000
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Bing 官方收录率</span>
+                <span class="px-2 py-0.5 text-xs font-bold font-mono rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                    {{ stats.bing_index_rate() }}%
                 </span>
             </div>
 
             <div class="space-y-2">
                 <div class="w-full bg-slate-950 rounded-full h-3.5 border border-slate-800 overflow-hidden p-0.5">
-                    <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r {% if stats.gsc_quota_percent() > 80 %}from-rose-600 to-rose-400{% else if stats.gsc_quota_percent() > 50 %}from-amber-600 to-amber-400{% else %}from-cyan-600 to-cyan-400{% endif %}" 
-                         {{ stats.gsc_quota_style_attr()|safe }}></div>
+                    <div class="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-blue-600 to-cyan-400" 
+                         {{ stats.bing_index_style_attr()|safe }}></div>
                 </div>
                 <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
-                    <span>已消耗: <b class="text-slate-200 font-mono">{{ stats.gsc_quota_percent() }}%</b></span>
-                    <span>剩余可用: <b class="text-cyan-400 font-mono">{{ stats.gsc_remaining_quota() }} 次</b></span>
+                    <span>已收录: <b class="text-sky-400 font-mono">{{ stats.bing_indexed }}</b></span>
+                    <span>未收录: <b class="text-rose-400 font-mono">{{ stats.bing_not_indexed }}</b></span>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 4 大专属流水线模块工作台卡片 -->
+    <!-- 4 大专属流水线模块工作台卡片 (严格按 1-发现 2-门禁 3-检测 4-推送 排列) -->
     <div class="space-y-4">
         <div class="flex items-center justify-between">
             <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span>⚡</span> 自动化索引流水线模块
+                <span>⚡</span> 自动化索引生命周期流水线
             </h3>
         </div>
 
@@ -116,54 +116,54 @@
             <a href="/sitemap?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-indigo-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
                 <div class="flex items-center justify-between">
                     <div class="h-11 w-11 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center text-xl shadow-inner">🔄</div>
-                    <span class="text-xs text-indigo-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入模块 &rarr;</span>
+                    <span class="text-xs text-indigo-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 1 &rarr;</span>
                 </div>
                 <div>
-                    <h4 class="text-base font-bold text-white group-hover:text-indigo-300 transition">Sitemap 资产发现与解析</h4>
+                    <h4 class="text-base font-bold text-white group-hover:text-indigo-300 transition">1. Sitemap 资产发现与解析</h4>
                     <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        流式递归展开 Sitemap 索引树，已纳管 <b class="text-white font-mono">{{ stats.url_total }}</b> 条网页资产。
+                        流式递归展开 Sitemap 索引树，全站已纳管 <b class="text-white font-mono">{{ stats.url_total }}</b> 条网页资产。
                     </p>
                 </div>
             </a>
 
-            <!-- 2. GSC 官方收录检测 -->
-            <a href="/gsc?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
-                <div class="flex items-center justify-between">
-                    <div class="h-11 w-11 rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center justify-center text-xl shadow-inner">🔍</div>
-                    <span class="text-xs text-sky-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入模块 &rarr;</span>
-                </div>
-                <div>
-                    <h4 class="text-base font-bold text-white group-hover:text-sky-300 transition">Google Search Console (GSC) 官方收录</h4>
-                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        深度同步 URL Inspection 状态：已确认收录 <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b> 篇，未收录 <b class="text-rose-400 font-mono">{{ stats.google_not_indexed }}</b> 篇。
-                    </p>
-                </div>
-            </a>
-
-            <!-- 3. 技术 SEO 质量门禁 -->
+            <!-- 2. 技术 SEO 质量门禁 -->
             <a href="/seo?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
                 <div class="flex items-center justify-between">
                     <div class="h-11 w-11 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-xl shadow-inner">🛡️</div>
-                    <span class="text-xs text-amber-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入模块 &rarr;</span>
+                    <span class="text-xs text-amber-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 2 &rarr;</span>
                 </div>
                 <div>
-                    <h4 class="text-base font-bold text-white group-hover:text-amber-300 transition">技术 SEO 质量拦截门禁</h4>
+                    <h4 class="text-base font-bold text-white group-hover:text-amber-300 transition">2. 技术 SEO 质量拦截门禁</h4>
                     <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        30 并发深度质检，已拦截 <b class="text-rose-400 font-mono">{{ stats.seo_issues }}</b> 个技术硬伤（404死链 / noindex 指令 / Canonical 错标）。
+                        30 并发本地质检，拦截 <b class="text-rose-400 font-mono">{{ stats.seo_issues }}</b> 个技术硬伤（404 死链 / noindex 错标 / Canonical 冲突）。
                     </p>
                 </div>
             </a>
 
-            <!-- 4. 搜索引擎提交流水线 -->
-            <a href="/submit?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
+            <!-- 3. 官方收录监测雷达 (先测收录) -->
+            <a href="/indexing?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
                 <div class="flex items-center justify-between">
-                    <div class="h-11 w-11 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center text-xl shadow-inner">🚀</div>
-                    <span class="text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入模块 &rarr;</span>
+                    <div class="h-11 w-11 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center text-xl shadow-inner">🔍</div>
+                    <span class="text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 3 &rarr;</span>
                 </div>
                 <div>
-                    <h4 class="text-base font-bold text-white group-hover:text-cyan-300 transition">全引擎主动推送流水线</h4>
+                    <h4 class="text-base font-bold text-white group-hover:text-cyan-300 transition">3. 官方收录监测雷达 (Google & Bing)</h4>
                     <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        Bing IndexNow 批量秒级推送与 Google Indexing 额度熔断调度，待推送 <b class="text-cyan-300 font-mono">{{ stats.pending_submit }}</b> 条。
+                        双引擎真实收录与爬取时间探测：Google 已收录 <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b> 篇，Bing 已收录 <b class="text-sky-400 font-mono">{{ stats.bing_indexed }}</b> 篇。
+                    </p>
+                </div>
+            </a>
+
+            <!-- 4. 搜索引擎提交流水线 (后精准推未收录) -->
+            <a href="/submit?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="h-11 w-11 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl shadow-inner">🚀</div>
+                    <span class="text-xs text-emerald-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 4 &rarr;</span>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-white group-hover:text-emerald-300 transition">4. 搜索引擎主动推送流水线</h4>
+                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                        仅对“门禁通过 + 官方未收录”页面精准推送，待提交 <b class="text-emerald-300 font-mono">{{ stats.pending_submit }}</b> 条，拒绝盲推浪费配额。
                     </p>
                 </div>
             </a>

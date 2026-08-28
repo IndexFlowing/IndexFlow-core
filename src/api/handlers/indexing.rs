@@ -10,8 +10,8 @@ use axum::{
 };
 
 #[derive(Template)]
-#[template(path = "seo.html")]
-pub struct SeoTemplate {
+#[template(path = "indexing.html")]
+pub struct IndexingTemplate {
     pub lang: &'static str,
     pub t: &'static Translations,
     pub stats: DashboardStats,
@@ -23,11 +23,14 @@ pub struct SeoTemplate {
     pub query_str: Option<String>,
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
-    pub is_running: bool,
+    pub has_bing_key: bool,
+    pub has_google_key: bool,
+    pub is_gsc_running: bool,
+    pub is_bing_running: bool,
     pub dry_run: bool,
 }
 
-pub async fn render_seo(
+pub async fn render_indexing(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(q): Query<QueryParams>,
@@ -47,6 +50,15 @@ pub async fn render_seo(
         .flatten();
     let current_site_id = site.as_ref().map(|s| s.id).unwrap_or(1);
 
+    let has_bing_key = site
+        .as_ref()
+        .map(|s| s.has_bing_webmaster_key())
+        .unwrap_or(false);
+    let has_google_key = site
+        .as_ref()
+        .map(|s| s.has_google_credentials())
+        .unwrap_or(false);
+
     let stats = state
         .site_service
         .dashboard_stats(current_site_id)
@@ -61,8 +73,8 @@ pub async fn render_seo(
             page,
             limit,
             q.q.as_deref(),
-            q.status.as_deref(),
             None,
+            q.status.as_deref(),
             None,
             None,
         )
@@ -70,7 +82,7 @@ pub async fn render_seo(
         .unwrap_or_default();
 
     HtmlTemplate(
-        SeoTemplate {
+        IndexingTemplate {
             lang: lang.as_str(),
             t,
             stats,
@@ -82,7 +94,16 @@ pub async fn render_seo(
             query_str: q.q,
             all_sites,
             current_site_id,
-            is_running: state.site_service.pipeline.is_running(PipelineStage::SeoGate),
+            has_bing_key,
+            has_google_key,
+            is_gsc_running: state
+                .site_service
+                .pipeline
+                .is_running(PipelineStage::GscInspect),
+            is_bing_running: state
+                .site_service
+                .pipeline
+                .is_running(PipelineStage::BingInspect),
             dry_run: state.dry_run,
         },
         set_cookie,

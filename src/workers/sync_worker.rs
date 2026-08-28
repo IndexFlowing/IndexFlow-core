@@ -1,7 +1,7 @@
-use crate::application::SitemapService;
+use crate::application::{PipelineManager, SitemapService};
 use crate::config::AppConfig;
+use crate::domain::PipelineStage;
 use crate::infrastructure::{SiteRepo, UrlRepo};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{error, info, warn};
@@ -11,7 +11,7 @@ pub struct SyncWorker {
     urls: UrlRepo,
     sites: SiteRepo,
     sitemap_service: SitemapService,
-    is_sync_running: Arc<AtomicBool>,
+    pipeline: PipelineManager,
     config: AppConfig,
 }
 
@@ -20,14 +20,14 @@ impl SyncWorker {
         urls: UrlRepo,
         sites: SiteRepo,
         sitemap_service: SitemapService,
-        is_sync_running: Arc<AtomicBool>,
+        pipeline: PipelineManager,
         config: AppConfig,
     ) -> Self {
         Self {
             urls,
             sites,
             sitemap_service,
-            is_sync_running,
+            pipeline,
             config,
         }
     }
@@ -46,15 +46,20 @@ impl SyncWorker {
     }
 
     async fn tick(&self) -> anyhow::Result<()> {
-        if !self.is_sync_running.load(Ordering::Relaxed) {
+        if !self.pipeline.is_running(PipelineStage::Sitemap) {
             return Ok(());
         }
 
-        self.is_sync_running.store(false, Ordering::Relaxed);
-
         let sites = self.sites.list_all().await?;
         for site in sites {
-            let Some(ref sm_url) = site.sitemap_url else { continue; };
+            if !self.pipeline.is_running(PipelineStage::Sitemap) {
+                info!("Sitemap 同步已被取消，Worker 回到待机");
+                return Ok(());
+            }
+
+            let Some(ref sm_url) = site.sitemap_url else {
+                continue;
+            };
 
             info!(sitemap = %sm_url, domain = %site.domain, "🌐 [SyncWorker] 正在连接目标 Sitemap 并流式解析...");
             let (_is_index, entries) = match self.sitemap_service.expand_to_page_entries(sm_url, 3).await {
@@ -69,6 +74,10 @@ impl SyncWorker {
             let mut total_inserted = 0u64;
 
             for chunk in entries.chunks(chunk_size) {
+                if !self.pipeline.is_running(PipelineStage::Sitemap) {
+                    info!("Sitemap 同步已被取消，Worker 回到待机");
+                    return Ok(());
+                }
                 let (inserted, _, _) = self.urls.batch_upsert_discovered(site.id, chunk).await?;
                 total_inserted += inserted;
             }
@@ -80,6 +89,8 @@ impl SyncWorker {
                 "🎉 [SyncWorker] 站点 Sitemap 同步入库完成！"
             );
         }
+
+        self.pipeline.stop(PipelineStage::Sitemap);
         Ok(())
     }
 }

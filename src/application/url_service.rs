@@ -3,6 +3,7 @@ use crate::domain::{ProviderKind, Url};
 use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::info;
@@ -143,13 +144,66 @@ impl UrlService {
         Ok(res.ok)
     }
 
-    /// 【核心新增】实时单条检测 Bing 收录状态
+    /// 实时单条检测 Bing 收录状态
     pub async fn inspect_bing_now(&self, id: i64) -> anyhow::Result<bool> {
         let Some(url) = self.urls.find_by_id(id).await? else { return Ok(false); };
         let Some(site) = self.sites.find_by_id(url.site_id).await? else { return Ok(false); };
         let res = self.bing_svc.inspect_one(&site, &url.url).await?;
         self.bing_svc.apply_inspect_result(url.id, &res).await?;
         Ok(res.ok)
+    }
+
+    /// 统一质检入口：`seo` | `google` | `bing`
+    pub async fn inspect_now(&self, id: i64, engine: &str) -> anyhow::Result<bool> {
+        match engine.trim().to_ascii_lowercase().as_str() {
+            "seo" => Ok(self.recheck(id).await?.map(|r| r.passed).unwrap_or(false)),
+            "google" | "gsc" => self.inspect_gsc_now(id).await,
+            "bing" => self.inspect_bing_now(id).await,
+            other => anyhow::bail!("unsupported inspect engine: {other}"),
+        }
+    }
+
+    /// 批量质检：`seo` | `google` | `bing`
+    pub async fn batch_inspect(&self, ids: &[i64], engine: &str) -> anyhow::Result<usize> {
+        let engine = engine.trim().to_ascii_lowercase();
+        match engine.as_str() {
+            "seo" => self.batch_recheck(ids).await,
+            "google" | "gsc" | "bing" => {
+                if ids.is_empty() {
+                    return Ok(0);
+                }
+                let is_bing = engine == "bing";
+                let concurrency = if is_bing { 2 } else { 3 };
+                let delay_ms = if is_bing { 500 } else { 250 };
+                info!(
+                    count = ids.len(),
+                    engine = %engine,
+                    "🔍 [UrlService] 正在批量执行官方收录检测..."
+                );
+
+                let semaphore = Arc::new(Semaphore::new(concurrency));
+                let mut set = JoinSet::new();
+                for &id in ids {
+                    let sem = semaphore.clone();
+                    let svc = self.clone();
+                    let engine = engine.clone();
+                    set.spawn(async move {
+                        let _permit = sem.acquire().await.unwrap();
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        svc.inspect_now(id, &engine).await.unwrap_or(false)
+                    });
+                }
+
+                let mut success_count = 0;
+                while let Some(res) = set.join_next().await {
+                    if let Ok(true) = res {
+                        success_count += 1;
+                    }
+                }
+                Ok(success_count)
+            }
+            _ => Ok(0),
+        }
     }
 
     pub async fn sync_gsc_analytics(&self, site_id: i64) -> anyhow::Result<u64> {
