@@ -13,11 +13,11 @@
 ## 核心特性
 
 - 📑 **标准 XML Sitemap 支持**：原生解析标准 `<urlset>`（页面集合）与多层级递归的 `<sitemapindex>`（Sitemap 索引树）。
-- 🔍 **Google 官方扩展全兼容**：原生提取 Google 图片（`<image:image>`）、视频（`<video:video>`）、新闻（`<news:news>`）以及多语言交替标签（`<xhtml:link rel="alternate" hreflang="...">`）。
-- 📄 **纯文本 Sitemap**：自动识别并按行提取 `.txt` 格式的 Sitemap 文件。
-- 🗜️ **透明 Gzip 解压**：自动嗅探 Magic Header 字节（`0x1F, 0x8B`），在内存中无缝秒级解压 `.xml.gz` 压缩包。
-- 🛡️ **循环引用与死锁防护**：内置已访问集合去重与递归深度上限，杜绝 Sitemap 爬虫陷入无限循环陷阱。
-- ⚡ **超强容错解析**：自动剥离 UTF-8 BOM 标头、容忍未转义实体字符及复杂嵌套的 `<![CDATA[...]]>` 语法。
+- 🔍 **Google 官方扩展全兼容**：原生提取 Google 图片（`<image:image>`）、视频（`<video:video>`）、新闻（`<news:news>`）以及多语言交替标签（`<xhtml:link rel="alternate" hreflang="...">`）。按 **local-name** 匹配，自定义前缀与无前缀标签均可识别。
+- 📄 **纯文本 Sitemap**：自动识别并按行提取 `.txt` 格式的 Sitemap 文件（仅保留 `http` / `https`）。
+- 🗜️ **透明 Gzip 解压**：自动嗅探 Magic Header 字节（`0x1F, 0x8B`），带 **50 MiB 解压上限**，防止 gzip bomb。同时识别 UTF-8 / UTF-16（LE & BE）BOM。
+- 🛡️ **循环引用与死锁防护**：归一化 URL 身份键（scheme/host 大小写、默认端口、fragment、尾斜杠）、递归深度上限、子 Sitemap 失败隔离。
+- ⚡ **超强容错解析**：自动剥离 BOM、容忍文档前注释、`<loc>` 中裸 `&`、Text + `<![CDATA[...]]>` 拼接、截断 XML（返回已解析部分），以及 W3C / RFC 3339 / ISO 8601 多种日期。
 
 ---
 
@@ -27,7 +27,7 @@
 
 ```toml
 [dependencies]
-indexflow-sitemap = { version = "0.1", features = ["fetch", "gzip"] }
+indexflow-sitemap = { version = "0.1.1", features = ["fetch", "gzip"] }
 ```
 
 ### Feature Flags 说明
@@ -122,6 +122,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `images`     | `Vec<SitemapImage>`     | Google 图片扩展元数据（`loc`, `title`, `caption`, `license`） |
 | `videos`     | `Vec<SitemapVideo>`     | Google 视频扩展元数据（`thumbnail_loc`, `title`, `duration` 等） |
 | `news`       | `Option<SitemapNews>`   | Google 新闻扩展元数据（`publication_name`, `title`, `date`） |
+
+安全上限（对齐 Google 协议 + 防炸弹）：单文档解压 50 MiB、单文件 50_000 条 URL、`expand_all` 全树最多 1_000_000 条。
+
+---
+
+## 更新日志
+
+### 0.1.1
+
+- Gzip / 原始载荷 **解压炸弹上限**（50 MiB）与流式 HTTP 下载限流。
+- 循环检测使用 **归一化 URL 身份**；子 Sitemap 拉取失败隔离，不中断整棵索引树。
+- XML 解析拼接 Text + CDATA、CDATA 外裸 `&` 预转义、按 local-name 匹配任意命名空间前缀；日期覆盖 W3C / RFC 3339 / ISO 8601。
+- UTF-8 BOM、UTF-16 LE/BE、文档前注释、截断 XML 部分结果、仅接受 `http(s)` loc。
 
 ---
 

@@ -1,14 +1,22 @@
 [package]
 name = "indexflow-sitemap"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "High-performance, fault-tolerant Google-compliant Sitemap parser and crawler supporting XML, Gzip, Plain Text, Images, Videos, News, and Hreflang extensions"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/IndexFlowing/IndexFlow-core"
 homepage = "https://www.indexflowing.com"
+documentation = "https://docs.rs/indexflow-sitemap"
 readme = "README.md"
 keywords = ["sitemap", "seo", "google", "xml", "crawler"]
 categories = ["web-programming", "parser-implementations"]
+include = [
+    "src/**/*",
+    "examples/**/*",
+    "Cargo.toml",
+    "README.md",
+    "README_zh.md",
+]
 
 [dependencies]
 quick-xml = "0.36"

@@ -13,11 +13,11 @@
 ## Key Features
 
 - 📑 **Standard XML Sitemaps**: Full specification support for standard `<urlset>` collections and recursive `<sitemapindex>` trees.
-- 🔍 **Google Extensions**: Native extraction of Google Images (`<image:image>`), Google Videos (`<video:video>`), Google News (`<news:news>`), and alternate multilingual tags (`<xhtml:link rel="alternate" hreflang="...">`).
-- 📄 **Plain Text Support**: Automatic detection and line-by-line parsing of `.txt` sitemap files.
-- 🗜️ **Transparent Gzip Decompression**: Automatic sniffing of gzip magic headers (`0x1F, 0x8B`) to decompress `.xml.gz` files seamlessly in memory.
-- 🛡️ **Cycle Detection & Depth Protection**: Built-in visited hash sets and configurable recursion limits to eliminate infinite loops and crawler traps.
-- ⚡ **Fault-Tolerant Parsing**: Resilient against UTF-8 BOM headers, unescaped characters, and complex nested `<![CDATA[...]]>` tags.
+- 🔍 **Google Extensions**: Native extraction of Google Images (`<image:image>`), Google Videos (`<video:video>`), Google News (`<news:news>`), and alternate multilingual tags (`<xhtml:link rel="alternate" hreflang="...">`). Namespace prefixes are matched by local-name, so custom prefixes and unprefixed tags both work.
+- 📄 **Plain Text Support**: Automatic detection and line-by-line parsing of `.txt` sitemap files (`http` / `https` only).
+- 🗜️ **Transparent Gzip Decompression**: Automatic sniffing of gzip magic headers (`0x1F, 0x8B`) with a **50 MiB uncompressed cap** against decompression bombs. UTF-8 / UTF-16 (LE & BE) BOMs are decoded.
+- 🛡️ **Cycle Detection & Depth Protection**: Normalized identity keys (scheme/host case, default ports, fragments, trailing slashes), configurable recursion limits, and per-child error isolation.
+- ⚡ **Fault-Tolerant Parsing**: Resilient against UTF-8 BOM headers, leading comments, bare `&` in `<loc>`, mixed Text + `<![CDATA[...]]>`, truncated XML (partial results), and W3C / RFC 3339 / ISO 8601 datetimes.
 
 ---
 
@@ -27,7 +27,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-indexflow-sitemap = { version = "0.1", features = ["fetch", "gzip"] }
+indexflow-sitemap = { version = "0.1.1", features = ["fetch", "gzip"] }
 ```
 
 ### Feature Flags
@@ -123,6 +123,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 | `videos`     | `Vec<SitemapVideo>`     | Google Videos extension metadata (`thumbnail_loc`, `title`, `duration`) |
 | `news`       | `Option<SitemapNews>`   | Google News extension metadata (`publication_name`, `title`, `date`) |
 
+Safety caps (Google protocol + bomb defence): 50 MiB uncompressed per document, 50_000 URLs per file, 1_000_000 URLs across a recursive `expand_all`.
+
+---
+
+## Changelog
+
+### 0.1.1
+
+- Gzip / raw payload **decompression-bomb cap** (50 MiB) and streamed HTTP download limits.
+- Cycle detection uses a **normalized URL identity** (scheme/host case, default port, fragment, trailing slash); child fetch failures are isolated.
+- XML parser concatenates Text + CDATA, rewrites bare `&` outside CDATA, matches tags by **local-name** (any prefix), and parses a wide W3C / RFC 3339 / ISO 8601 datetime matrix.
+- UTF-8 BOM, UTF-16 LE/BE, leading comments, truncated XML (partial result), and `http(s)`-only loc filtering.
+
 ---
 
 ## License
@@ -130,4 +143,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Dual-licensed under either of:
 - [Apache License, Version 2.0](LICENSE-APACHE)
 - [MIT License](LICENSE-MIT)
-

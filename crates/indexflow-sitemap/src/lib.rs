@@ -6,7 +6,7 @@
 //! - Standard XML (`<urlset>`, `<sitemapindex>`)
 //! - Google extensions (Images, Videos, News, and XHTML Hreflang)
 //! - Plain text (`.txt`) sitemap support
-//! - Transparent Gzip decompression (`.xml.gz`)
+//! - Transparent Gzip decompression (`.xml.gz`) with decompression-bomb caps
 //! - Circular reference detection and depth protection
 
 pub mod compression;
@@ -17,10 +17,10 @@ pub mod parser;
 #[cfg(feature = "fetch")]
 pub mod fetcher;
 
-pub use compression::decode_if_gzipped;
+pub use compression::{decode_if_gzipped, decode_if_gzipped_with_limit};
 pub use error::SitemapError;
 pub use models::*;
-pub use parser::parse_sitemap;
+pub use parser::{parse_datetime, parse_priority, parse_sitemap};
 
 #[cfg(feature = "fetch")]
 pub use fetcher::SitemapFetcher;
@@ -133,23 +133,19 @@ mod tests {
                 let entry = &entries[0];
                 assert_eq!(entry.loc, "https://example.com/post-1");
 
-                // Hreflang
                 assert_eq!(entry.hreflangs.len(), 1);
                 assert_eq!(entry.hreflangs[0].lang, "zh");
                 assert_eq!(entry.hreflangs[0].href, "https://example.com/zh/post-1");
 
-                // Images
                 assert_eq!(entry.images.len(), 1);
                 assert_eq!(entry.images[0].loc, "https://example.com/cover.jpg");
                 assert_eq!(entry.images[0].title.as_deref(), Some("Post Cover"));
 
-                // Videos
                 assert_eq!(entry.videos.len(), 1);
                 assert_eq!(entry.videos[0].title, "Tutorial Video");
                 assert_eq!(entry.videos[0].duration_seconds, Some(600));
                 assert_eq!(entry.videos[0].family_friendly, Some(true));
 
-                // News
                 assert!(entry.news.is_some());
                 let news = entry.news.as_ref().unwrap();
                 assert_eq!(news.publication_name, "Tech Daily");
@@ -211,7 +207,8 @@ mod tests {
         let parsed = parse_sitemap(empty_urlset);
         assert!(parsed.is_empty());
 
-        let empty_index = r#"<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></sitemapindex>"#;
+        let empty_index =
+            r#"<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></sitemapindex>"#;
         let parsed_idx = parse_sitemap(empty_index);
         assert!(parsed_idx.is_empty());
     }
