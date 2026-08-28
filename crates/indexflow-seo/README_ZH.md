@@ -1,10 +1,10 @@
-# indexflow-sitemap
+# indexflow-seo
 
-[![Crates.io](https://img.shields.io/crates/v/indexflow-sitemap.svg)](https://crates.io/crates/indexflow-sitemap)
-[![Documentation](https://docs.rs/indexflow-sitemap/badge.svg)](https://docs.rs/indexflow-sitemap)
+[![Crates.io](https://img.shields.io/crates/v/indexflow-seo.svg)](https://crates.io/crates/indexflow-seo)
+[![Documentation](https://docs.rs/indexflow-seo/badge.svg)](https://docs.rs/indexflow-seo)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 
-> 基于纯 Rust 实现的高性能、高容错、全兼容 Google 官方规范的 Sitemap 流式解析器与递归爬虫库。
+> 基于纯 Rust 实现的高性能、零依赖技术 SEO 质量门禁与 GEO (Generative Engine Optimization) AI 搜索审计库。
 
 [English Documentation](./README.md)
 
@@ -12,96 +12,124 @@
 
 ## 核心特性
 
-- 📑 **标准 XML Sitemap 支持**：原生支持 `<urlset>`（页面集合）与 `<sitemapindex>`（Sitemap 索引树）。
-- 🔍 **Google 官方扩展全支持**：深度提取 Google 图片（`<image:image>`）、视频（`<video:video>`）、新闻（`<news:news>`）以及多语言交替链接（`<xhtml:link rel="alternate" hreflang="...">`）。
-- 📄 **纯文本 Sitemap**：自动嗅探并解析 `.txt` 文本格式的 Sitemap 文件（每行一个 URL）。
-- 🗜️ **透明 Gzip 解压**：自动嗅探 Magic Header 字节（`0x1F, 0x8B`），无缝秒级解压 `.xml.gz` 压缩文件。
-- 🛡️ **防死锁与深度熔断**：内置访问集合去重与递归深度上限，杜绝 Sitemap 循环引用陷入死循环。
-- ⚡ **超强容错解析**：自动剥离 UTF-8 BOM 标头、容忍未转义实体字符及复杂嵌套的 `<![CDATA[...]]>` 语法。
+- 🛡️ **技术 SEO 质量门禁**：严格校验 HTTP 状态码、Canonical 规范链接等价性、`noindex`/`nofollow` 阻断指令、`<title>` 缺失及 `<h1>` 主标题。
+- 🤖 **GEO 与 AI 搜索引擎审计**：原生嗅探主流 AI 爬虫的屏蔽指令（`GPTBot`、`PerplexityBot`、`ClaudeBot`、`Google-Extended`）。
+- 📑 **Schema.org 结构化数据**：毫秒级提取 `application/ld+json` 代码块，自动映射 `@type` 实体模型（如 `Article`、`FAQPage`、`Product`）。
+- 🌐 **社交与多语言元数据**：解析 OpenGraph、Twitter Card 标签及 `xhtml:link` 多语言 hreflang 数组。
+- ⚡ **纯内存无 I/O 评估**：直接传入 HTML 字符串执行评估，适合高并发单元测试与无网络依赖的批处理质检。
+- 🚀 **可选不跟随重定向探针**：内置异步 HTTP 客户端，将 3xx 重定向直接作为门禁诊断项拦截。
 
 ---
 
 ## 安装引入
 
-在你的 `Cargo.toml` 中添加依赖：
+在 `Cargo.toml` 中添加依赖：
 
 ```toml
 [dependencies]
-indexflow-sitemap = { version = "0.1", features = ["fetch", "gzip"] }
+indexflow-seo = "0.1"
 ```
 
----
+### Feature Flags 说明
+
+- probe *（默认开启）*：启用基于 reqwest (纯 Rustls TLS) 的异步网络探测客户端 SeoProbeClient。
+
+------
+
+
 
 ## 快速上手
 
-### 1. 纯内存 XML 字符串极速解析
+### 1. 纯内存 HTML 质检评估（零 I/O）
 
-```rust
-use indexflow_sitemap::{parse_sitemap, ParsedSitemap};
+```
+use indexflow_seo::evaluate_html;
 
 fn main() {
-    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
-    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-            xmlns:xhtml="http://www.w3.org/1999/xhtml">
-      <url>
-        <loc>https://example.com/blog/rust-guide</loc>
-        <lastmod>2026-03-30T10:00:00Z</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>0.8</priority>
-        <xhtml:link rel="alternate" hreflang="zh" href="https://example.com/zh/blog/rust-guide"/>
-      </url>
-    </urlset>"#;
+    let page_url = "https://example.com/blog/rust-guide";
+    let html = r#"
+    <!DOCTYPE html>
+    <html lang="zh">
+    <head>
+      <title>Rust 全栈单体架构实践</title>
+      <meta name="description" content="面向独立开发者的 Rust 高性能技术指南。" />
+      <link rel="canonical" href="https://example.com/blog/rust-guide" />
+      <meta name="robots" content="index, follow" />
+      
+      <!-- AI 爬虫指令 -->
+      <meta name="gptbot" content="index" />
+      <meta name="perplexitybot" content="index" />
 
-    match parse_sitemap(xml) {
-        ParsedSitemap::UrlSet { entries } => {
-            for entry in entries {
-                println!("页面 URL: {}", entry.loc);
-                println!("上次更新时间: {:?}", entry.lastmod);
-                println!("调度优先级: {:?}", entry.priority);
-                println!("多语言 Alternate 数量: {}", entry.hreflangs.len());
-            }
-        }
-        ParsedSitemap::Index { child_urls } => {
-            println!("检测到 SitemapIndex 索引文件，包含 {} 个子 Sitemap", child_urls.len());
-        }
-        ParsedSitemap::PlainText { urls } => {
-            println!("纯文本格式 Sitemap，包含 {} 个 URL", urls.len());
-        }
+      <!-- 结构化数据 -->
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Rust 全栈单体架构实践"
+      }
+      </script>
+    </head>
+    <body>
+      <h1>Rust 全栈单体架构实践指南</h1>
+    </body>
+    </html>"#;
+
+    let result = evaluate_html(page_url, 200, 25, None, html);
+
+    if result.passed {
+        println!("✅ 技术 SEO 门禁: 通过 (PASS)");
+        println!("页面标题: {:?}", result.page_title);
+        println!("H1 主标题: {:?}", result.h1_content);
+        println!("结构化实体: {:?}", result.schema_types());
+    } else {
+        println!("❌ 技术 SEO 门禁: 拦截 (原因: {:?})", result.block_reason);
     }
 }
 ```
 
-### 2. 异步流式递归展开 Sitemap 索引树
+### 2. 异步网络探测客户端（启用 probe Feature）
 
-```rust
-use indexflow_sitemap::SitemapFetcher;
+```
+use indexflow_seo::SeoProbeClient;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .user_agent("Mozilla/5.0 (compatible; IndexFlowBot/1.0)")
-        .build()?;
+    let prober = SeoProbeClient::new(
+        "Mozilla/5.0 (compatible; IndexFlowBot/1.0)",
+        Duration::from_secs(10),
+    )?;
 
-    let fetcher = SitemapFetcher::new(client);
+    let result = prober.check_url("https://www.example.com").await;
 
-    // 递归展开最多 3 层的 SitemapIndex 树结构
-    let target = "https://www.example.com/sitemap_index.xml";
-    let (is_index_tree, all_page_entries) = fetcher.expand_all(target, 3).await?;
-
-    println!("是否为索引树: {}", is_index_tree);
-    println!("成功发现的全量页面 URL 总数: {}", all_page_entries.len());
+    println!("质检结果: 通过={}, 拦截原因={:?}", result.passed, result.block_reason);
+    println!("网络响应耗时: {:?} ms", result.response_time_ms);
+    println!("GPTBot 屏蔽状态: {}", result.ai_directives.gptbot_blocked);
 
     Ok(())
 }
 ```
 
----
+------
+
+
+
+## 🛡️ 质量门禁拦截规则
+
+indexflow-seo 在准许 URL 提交给搜索引擎前，会严格按照以下规则执行前置质检：
+
+1. **HTTP 状态码**：必须严格等于 200 OK；
+2. **Robots 阻断指令**：不得包含 <meta name="robots" content="noindex"> 或 X-Robots-Tag: noindex；
+3. **Canonical 规范链接**：声明的 Canonical 必须与实际访问 URL 等价（自动处理相对路径、大小写、默认端口 80/443 及尾部斜杠差异）；
+4. **页面标题**：必须包含非空的 <title> 元素。
+
+------
+
+
 
 ## 开源协议
 
 本项目采用双重授权：
-- [Apache License, Version 2.0](LICENSE-APACHE)
-- [MIT License](LICENSE-MIT)
 
+- [Apache License, Version 2.0](https://www.google.com/url?sa=E&q=LICENSE-APACHE)
+- [MIT License](https://www.google.com/url?sa=E&q=LICENSE-MIT)

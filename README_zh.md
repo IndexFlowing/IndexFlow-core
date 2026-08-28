@@ -1,144 +1,293 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/IndexFlowing/IndexFlow-core/main/static/logo.png" alt="IndexFlow Logo" width="96" />
+
 # IndexFlow
 
-**面向海量页面的开源搜索引擎收录基础设施。**
+### 开源 SEO 与搜索索引基础设施
 
-[English](README.md) | [中文]
+**基于 Rust 构建 • 内存安全 • 开发者优先 • 面向 AI 搜索时代**
 
-四大解耦工作台（Sitemap 资产、SEO 质检、引擎推送、GSC 收录监控）、Google 滚动 24 小时配额熔断，以及 Search Analytics 豁免：已有展示的 URL 不再消耗 Indexing API 配额。
+[![Crates.io SEO](https://img.shields.io/crates/v/indexflow-seo.svg?label=crates.io%20%7C%20seo)](https://crates.io/crates/indexflow-seo)
+[![Crates.io Sitemap](https://img.shields.io/crates/v/indexflow-sitemap.svg?label=crates.io%20%7C%20sitemap)](https://crates.io/crates/indexflow-sitemap)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/IndexFlowing/IndexFlow-core?style=social)](https://github.com/IndexFlowing/IndexFlow-core)
 
----
-
-## 生产环境真实落地
-
-IndexFlow 不是玩具项目，已在真实生产环境承载数十万级页面的高并发 SEO 检查与自动推送：
-
-- **[Mandarin Clips](https://www.mandarinclips.com)** — 海量中文学习与视频语料站，**230,000+** 页面持续调度中
-- **[Inkvilion](https://www.inkvilion.com)** — 多语言词典与在线工具站，**10,000+** 页面全自动索引
+[🌐 官网](https://www.indexflowing.com) ·
+[📖 文档](https://docs.rs/indexflow-seo) ·
+[English](README.md)
 
 ---
 
-## 为什么选择 IndexFlow？
+# 🚀 什么是 IndexFlow？
 
-站点规模到十万、百万 URL 之后，传统 Sitemap 提交会撞上这些墙：
+IndexFlow 是一个基于 Rust 构建的开源 **SEO 与搜索索引基础设施项目**。
 
-1. **Google Indexing API 配额极紧** — 单项目每天约 200 条，超额会堵死整条队列。
-2. **提交低质/死链会反噬整站** — 404、noindex、Canonical 偏离既浪费配额，也伤害抓取信任。
-3. **多引擎进度不能混在一起** — Bing（IndexNow）一天可推上万条，Google 只能按日消耗；共用进度条会把两套时钟搅乱。
-4. **大站饿死小站** — 单一大队列独占 Worker，其他站点无法推进。
+在现代 Web 时代，一个网站的增长不再只是发布内容。
 
-IndexFlow 从这些约束出发设计，而不是从演示级 Sitemap 出发。
+随着：
 
----
+- Google Search
+- AI Search（ChatGPT Search、Perplexity、Claude）
+- GEO（Generative Engine Optimization，生成式引擎优化）
 
-## 核心特性
+的发展，开发者需要更好的基础设施来理解：
 
-- **高性能 Rust 后端** — Axum + Tokio + SQLx。低内存、高并发，轻松承载百万级 URL 元数据与状态机流转。
-- **四大独立工作台**（同一站点摘要头下）
-  - **Sitemap 资产** — 递归解析 XML / sitemap-index；locale、path prefix、lastmod、priority
-  - **SEO 质检** — 独立 HTTP 扫描（200、`<title>`、description、canonical、robots、H1），不触发推送
-  - **引擎推送** — Bing IndexNow 批量 vs Google Indexing API（滚动 24h 配额）分队列
-  - **收录监控** — GSC Search Analytics 批量收获 + URL Inspection 漏斗（2,000/天）
-- **GSC 配额豁免** — 有展示次数的页面标记为 `INDEXED` / `google_status=SUBMITTED`，不再占用每日 200 条 Indexing API
-- **单 URL 深度诊断抽屉** — 即时 Recheck SEO、立刻提交 Bing/Google、元标签信号、GSC coverage、原始响应
-- **Cloudflare WAF 绕过** — 所有页面爬虫携带内部 User-Agent
-- **多站点公平调度** — 窗口分区并发拉取，杜绝单一大站点垄断 Worker
-- **配额熔断** — Google 耗尽后休眠到下一个空闲槽位，无空转探测
-- **3 态守恒生命周期** — `PENDING` + `SUBMITTED` + `BLOCKED` = `TOTAL`
+- 搜索引擎如何发现网站
+- 网站是否满足技术 SEO 要求
+- 内容是否能够被机器正确理解
+- 网站是否具备面向未来 AI 搜索的基础能力
 
-凭证状态：**未填写 (Unset)** / **已填写 (Saved)** / **已验证 (Verified)**。只有验证通过的通道才会进入推送。
+IndexFlow 致力于提供轻量、可靠、开发者友好的 Rust 工具链，帮助开发者构建更好的搜索可见性。
 
-![控制台首页](./images/首页.png)
 
 ---
 
-## 技术栈
+# 🎯 为什么需要 IndexFlow？
 
-| 层次 | 选型 | 说明 |
-| :--- | :--- | :--- |
-| **后端核心** | Rust 2021, Axum, Tokio, SQLx | 异步 Worker、状态机、API |
-| **前端工作台** | Next.js 15 (App Router), Tailwind CSS | 暗色控制台，单站独立工作流 |
-| **数据存储** | PostgreSQL 14+ | 生命周期、分区索引、乐观锁 |
-| **鉴权** | JWT + Google Service Account OAuth2 | 单租户管理员与凭证隔离 |
+构建和运营一个网站，往往存在大量隐藏的技术问题。
 
----
 
-## 自托管
+## 🔍 搜索发现
 
-### 环境要求
+搜索引擎需要结构化的信息来发现和理解网站内容。
 
-- Rust 1.75+
-- PostgreSQL 14+
-- Node.js 18+（仅在需要重新构建前端时）
+IndexFlow 提供：
 
-### 环境变量
+- XML Sitemap 处理
+- URL 结构分析
+- 搜索索引工作流基础能力
 
-在后端根目录创建 `.env`：
 
-```env
-# 服务监听
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
+## ⚙️ 技术 SEO
 
-# 数据库
-DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/indexflow
+很多网站无法获得良好搜索表现，并不是内容问题，而是隐藏的技术问题：
 
-# Google 滚动 24 小时配额（默认 200）
-GOOGLE_DAILY_QUOTA=200
+- Canonical 配置错误
+- Robots 指令错误
+- Meta 信息缺失
+- 页面结构问题
 
-# GSC URL Inspection 滚动 24 小时配额（默认 2000）
-GSC_INSPECT_DAILY_QUOTA=2000
+IndexFlow 提供工具帮助开发者发现潜在问题。
 
-# 调度与 Worker 节流
-SCHEDULER_INTERVAL_SECS=60
-SUBMIT_WORKER_BATCH=50
-SUBMIT_WORKER_INTERVAL_SECS=2
 
-# JWT 鉴权密钥
-JWT_SECRET=your-secure-jwt-secret-key-change-me
-```
+## 🤖 AI 搜索时代
 
-首次启动时，SQLx 会自动执行 `migrations/`。
+搜索正在发生变化。
 
-### 启动
+AI 系统越来越依赖：
 
-```bash
-# 可选：重新构建静态工作台
-cd ui && npm install && npm run build && cd ..
+- 结构化数据
+- 清晰的网站架构
+- 机器可读的信息
 
-cargo run
-```
+IndexFlow 希望成为下一代网站发现与搜索基础设施的一部分。
 
-Windows 可用 `start.ps1`：如有需要会先构建 `ui/out`，再启动 API。浏览器打开 `http://127.0.0.1:<SERVER_PORT>/`（本仓库默认 **8010**）。首次访问会引导创建管理员账号。添加站点后填写 IndexNow Key 和/或 Google Service Account JSON，点击 **测试 Bing** / **测试 Google** 直到通道为 **已验证**。GSC 同步还需把同一服务账号邮箱加为 Search Console 用户。四个选项卡可独立操作：同步 Sitemap、跑 SEO 审计、推送 Bing/Google、从 GSC 同步已收录 URL。
-
-### 测试
-
-```bash
-cargo check
-cargo test
-```
 
 ---
 
-## 工作原理
+# 🏗️ 项目架构
+
+IndexFlow 采用模块化 Rust 生态设计。
 
 ```
-[ 模块 1：Sitemap 资产 ]  ── 唯一数据源（仅 SYNC_SITEMAP）
-            │
-            ├──► [ 模块 2：SEO 质检 ]     CHECK_URL（独立）
-            ├──► [ 模块 3：引擎推送 ]     SUBMIT_BING / SUBMIT_GOOGLE
-            └──► [ 模块 4：收录监控 ]     GSC Analytics + GSC_INSPECT
+                IndexFlow
+
+                    |
+    ---------------------------------
+    |                               |
+
+indexflow-sitemap                 indexflow-seo
+
+XML Sitemap 解析器             技术 SEO 分析器
+    |                               |
+
+    ---------------------------------
+
+              IndexFlow Platform
+              
 ```
 
-- 同步 Sitemap 不会排队 SEO 或推送任务。
-- SEO 审计不会排队 Bing/Google 推送。
-- GSC Search Analytics（impressions &gt; 0）标记 `google_index_status=INDEXED`，豁免 Google Indexing API 配额。
-- GSC URL Inspection 填充漏斗：已收录 / 已抓取未收录 / 已发现未收录 / 未知（每天最多 2,000）。
-- 点击任意 URL 打开诊断抽屉（`GET /urls/:id/analysis`、`POST /urls/:id/recheck`、`POST /urls/:id/submit-now`）。
+开源组件提供基础能力。
 
-超时仍处于 `PROCESSING` 的僵尸任务会被自动回收，避免服务崩溃后死锁。
+商业平台将在这些组件之上构建更多网站管理、索引管理和智能分析能力。
+
 
 ---
 
-## 许可
+# 📦 开源组件
 
-Source-available Open Core。欢迎自用、Fork，并在你自己的站点上运行。
+
+## indexflow-sitemap
+
+一个轻量级 Rust XML Sitemap 处理库。
+
+主要功能：
+
+- XML Sitemap 解析
+- Sitemap Index 支持
+- URL 提取
+- 简洁易用的 Rust API
+
+
+Crates.io：
+
+https://crates.io/crates/indexflow-sitemap
+
+
+---
+
+
+## indexflow-seo
+
+一个基于 Rust 的技术 SEO 分析库。
+
+主要功能：
+
+- HTML 页面分析
+- SEO 元数据检查
+- 技术 SEO 验证
+- 可扩展分析架构
+
+
+Crates.io：
+
+https://crates.io/crates/indexflow-seo
+
+
+---
+
+# 💡 设计理念
+
+
+## 🦀 Rust 原生
+
+使用 Rust 构建：
+
+- 内存安全
+- 高性能
+- 可靠的基础设施组件
+- 零成本抽象
+
+
+## 👨‍💻 开发者优先
+
+IndexFlow 面向希望拥有：
+
+- 开源方案
+- 自托管能力
+- 透明架构
+- 可复用组件
+
+的开发者。
+
+
+## ⚡ 轻量基础设施
+
+相比复杂庞大的 SEO 平台，IndexFlow 更关注：
+
+- 简单部署
+- 清晰架构
+- 可组合组件
+
+
+---
+
+# 🛣️ 路线图
+
+
+## ✅ 已完成
+
+### indexflow-sitemap
+
+- XML Sitemap 解析器
+- Rust Library
+- 已发布至 crates.io
+
+
+### indexflow-seo
+
+- 技术 SEO 分析
+- Rust Library
+- 已发布至 crates.io
+
+
+---
+
+## 🚧 开发中
+
+### IndexFlow Platform
+
+计划支持：
+
+- 网站管理
+- 搜索索引工作流
+- Sitemap 监控
+- Google Search Console 集成
+- IndexNow 集成
+
+
+---
+
+## 🔮 未来方向
+
+### AI SEO Intelligence
+
+探索：
+
+- AI SEO 分析报告
+- GEO 优化建议
+- 网站智能分析
+- 搜索可见性分析
+
+
+---
+
+# 🌐 IndexFlow 平台
+
+开源核心将作为未来 IndexFlow 平台的基础。
+
+IndexFlow 希望帮助网站开发者和企业管理：
+
+- 网站健康状态
+- 搜索可见性
+- 索引流程
+- AI 搜索优化
+
+
+了解更多：
+
+https://www.indexflowing.com
+
+
+---
+
+# 🤝 参与贡献
+
+IndexFlow 是一个开放建设中的项目。
+
+欢迎：
+
+- 提交 Issue
+- 提出建议
+- 参与讨论
+- 提交 Pull Request
+
+
+如果 IndexFlow 对你有帮助：
+
+⭐ 欢迎 Star 项目
+
+你的支持会帮助更多开发者发现 IndexFlow。
+
+
+---
+
+# 📄 开源协议
+
+IndexFlow 使用双许可证：
+
+- MIT License
+- Apache License 2.0
+
+你可以根据需要选择其中之一。

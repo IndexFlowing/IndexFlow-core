@@ -1,101 +1,123 @@
-# indexflow-sitemap
+# indexflow-seo
 
-[![Crates.io](https://img.shields.io/crates/v/indexflow-sitemap.svg)](https://crates.io/crates/indexflow-sitemap)
-[![Documentation](https://docs.rs/indexflow-sitemap/badge.svg)](https://docs.rs/indexflow-sitemap)
+[![Crates.io](https://img.shields.io/crates/v/indexflow-seo.svg)](https://crates.io/crates/indexflow-seo)
+[![Documentation](https://docs.rs/indexflow-seo/badge.svg)](https://docs.rs/indexflow-seo)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 
-> A blazing-fast, fault-tolerant, streaming Google-compliant Sitemap parser and crawler written in pure Rust.
+> A blazing-fast, zero-dependency Technical SEO Quality Gate & GEO (Generative Engine Optimization) Auditor written in pure Rust.
 
 [中文文档 (Chinese Documentation)](./README_zh.md)
 
 ---
 
-## Features
+## Key Features
 
-- 📑 **Standard XML Sitemaps**: Full support for `<urlset>` (URL collections) and `<sitemapindex>` (recursive sitemap index trees).
-- 🔍 **Google Extensions**: Native extraction of Google Images (`<image:image>`), Google Videos (`<video:video>`), Google News (`<news:news>`), and alternate multilingual links (`<xhtml:link rel="alternate" hreflang="...">`).
-- 📄 **Plain Text Support**: Automatic detection and parsing of `.txt` sitemap files (one URL per line).
-- 🗜️ **Transparent Gzip Decompression**: Automatic sniffing of gzip magic headers (`0x1F, 0x8B`) and instant decompression of `.xml.gz` files.
-- 🛡️ **Depth & Circular Reference Protection**: Guard against infinite loops, sitemap recursion traps, and depth overflow.
-- ⚡ **Fault-Tolerant Parsing**: Resilient against UTF-8 BOM headers, unescaped entities, and nested `<![CDATA[...]]>` tags.
+- 🛡️ **Technical SEO Gatekeeper**: Pre-flight validation for HTTP status codes, Canonical declaration equivalence, `noindex`/`nofollow` robots directives, `<title>` tags, and `<h1>` headings.
+- 🤖 **GEO & AI Bot Auditing**: Automatically audits crawler exclusion directives for mainstream AI search engines (`GPTBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`).
+- 📑 **Schema.org Structured Data**: Instant extraction of embedded `application/ld+json` blocks and automatic entity mapping (e.g. `Article`, `FAQPage`, `Product`, `Organization`).
+- 🌐 **Social & Multilingual Metadata**: Parses OpenGraph, Twitter Card tags, and `xhtml:link` alternate language (`hreflang`) arrays.
+- ⚡ **Pure In-Memory Evaluation**: Zero-cost, memory-safe evaluation function that works directly on HTML strings without mandatory network I/O.
+- 🚀 **Optional Non-Redirecting Prober**: Lightweight async HTTP client that treats 3xx redirects as actionable gate issues.
 
 ---
 
 ## Installation
 
-Add to your `Cargo.toml`:
+Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-indexflow-sitemap = { version = "0.1", features = ["fetch", "gzip"] }
+indexflow-seo = "0.1"
 ```
+
+### Feature Flags
+
+- `probe` *(default)*: Enables the async HTTP `SeoProbeClient` via `reqwest` (with pure Rustls TLS).
 
 ---
 
 ## Quick Start
 
-### 1. In-Memory XML String Parsing
+### 1. Pure In-Memory HTML Evaluation (Zero-I/O)
 
 ```rust
-use indexflow_sitemap::{parse_sitemap, ParsedSitemap};
+use indexflow_seo::evaluate_html;
 
 fn main() {
-    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
-    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-            xmlns:xhtml="http://www.w3.org/1999/xhtml">
-      <url>
-        <loc>https://example.com/blog/rust-guide</loc>
-        <lastmod>2026-03-30T10:00:00Z</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>0.8</priority>
-        <xhtml:link rel="alternate" hreflang="zh" href="https://example.com/zh/blog/rust-guide"/>
-      </url>
-    </urlset>"#;
+    let page_url = "https://example.com/blog/rust-guide";
+    let html = r#"
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <title>Rust Monolith Guide &amp; SEO Best Practices</title>
+      <meta name="description" content="A complete technical SEO guide for modern Rust developers." />
+      <link rel="canonical" href="https://example.com/blog/rust-guide" />
+      <meta name="robots" content="index, follow" />
+      
+      <!-- AI Bot Directives -->
+      <meta name="gptbot" content="index" />
+      <meta name="perplexitybot" content="index" />
 
-    match parse_sitemap(xml) {
-        ParsedSitemap::UrlSet { entries } => {
-            for entry in entries {
-                println!("URL: {}", entry.loc);
-                println!("Lastmod: {:?}", entry.lastmod);
-                println!("Priority: {:?}", entry.priority);
-                println!("Hreflang count: {}", entry.hreflangs.len());
-            }
-        }
-        ParsedSitemap::Index { child_urls } => {
-            println!("Sitemap Index detected with {} child sitemaps.", child_urls.len());
-        }
-        ParsedSitemap::PlainText { urls } => {
-            println!("Plain text sitemap with {} URLs.", urls.len());
-        }
+      <!-- Structured Data -->
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Rust Monolith Guide"
+      }
+      </script>
+    </head>
+    <body>
+      <h1>Complete Guide to Rust Monolith</h1>
+    </body>
+    </html>"#;
+
+    let result = evaluate_html(page_url, 200, 25, None, html);
+
+    if result.passed {
+        println!("✅ SEO Gate: PASSED");
+        println!("Page Title: {:?}", result.page_title);
+        println!("H1 Content: {:?}", result.h1_content);
+        println!("Schema.org Entities: {:?}", result.schema_types());
+    } else {
+        println!("❌ SEO Gate: BLOCKED (Reason: {:?})", result.block_reason);
     }
 }
 ```
 
-### 2. Recursive Async Fetch & Index Tree Expansion
+### 2. Async HTTP Quality Prober (with `probe` feature)
 
 ```rust
-use indexflow_sitemap::SitemapFetcher;
+use indexflow_seo::SeoProbeClient;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .user_agent("Mozilla/5.0 (compatible; IndexFlowBot/1.0)")
-        .build()?;
+    let prober = SeoProbeClient::new(
+        "Mozilla/5.0 (compatible; IndexFlowBot/1.0)",
+        Duration::from_secs(10),
+    )?;
 
-    let fetcher = SitemapFetcher::new(client);
+    let result = prober.check_url("https://www.example.com").await;
 
-    // Recursively expand all sitemap indexes up to 3 levels deep
-    let target = "https://www.example.com/sitemap_index.xml";
-    let (is_index_tree, all_page_entries) = fetcher.expand_all(target, 3).await?;
-
-    println!("Is Sitemap Index: {}", is_index_tree);
-    println!("Total discovered page URLs: {}", all_page_entries.len());
+    println!("Gate Result: passed={}, reason={:?}", result.passed, result.block_reason);
+    println!("Response Time: {:?} ms", result.response_time_ms);
+    println!("GPTBot Blocked: {}", result.ai_directives.gptbot_blocked);
 
     Ok(())
 }
 ```
+
+---
+
+## 🛡️ Gate Rules & Criteria
+
+`indexflow-seo` enforces the following pre-flight checks before approving a URL for search engine submission:
+
+1. **HTTP Status**: Must strictly return `200 OK`.
+2. **Robots Directives**: Neither `<meta name="robots" content="noindex">` nor `X-Robots-Tag: noindex` header may be present.
+3. **Canonical Normalization**: Declared `<link rel="canonical">` must match the actual URL (automatically handles relative paths, default ports 80/443, trailing slashes, and case-insensitivity).
+4. **Title Tag**: Must contain a valid, non-empty `<title>` element.
 
 ---
 
@@ -104,4 +126,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Dual-licensed under either of:
 - [Apache License, Version 2.0](LICENSE-APACHE)
 - [MIT License](LICENSE-MIT)
-

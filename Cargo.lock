@@ -1040,7 +1040,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "tokio",
  "tracing",
  "url",
 ]
@@ -1055,7 +1054,6 @@ dependencies = [
  "reqwest",
  "serde",
  "thiserror 1.0.69",
- "tokio",
  "tracing",
  "url",
 ]

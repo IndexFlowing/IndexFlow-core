@@ -1,144 +1,313 @@
+<div align="center">
+<img src="https://raw.githubusercontent.com/IndexFlowing/IndexFlow-core/main/static/logo.png" alt="IndexFlow Logo" width="96" />
+
 # IndexFlow
 
-**Open-source search index infrastructure for high-volume sites.**
+### Open-source SEO & Search Indexing Infrastructure
 
-[English] | [中文](README_zh.md)
+**Built with Rust • Memory Safe • Developer First • Ready for the AI Search Era**
 
-Four decoupled workspaces (sitemap assets, SEO quality gate, engine push, GSC index monitoring), a rolling 24-hour Google quota circuit, and Search Analytics exemption so already-ranking URLs never burn Indexing API quota.
+[![Crates.io SEO](https://img.shields.io/crates/v/indexflow-seo.svg?label=crates.io%20%7C%20seo)](https://crates.io/crates/indexflow-seo)
+[![Crates.io Sitemap](https://img.shields.io/crates/v/indexflow-sitemap.svg?label=crates.io%20%7C%20sitemap)](https://crates.io/crates/indexflow-sitemap)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/IndexFlowing/IndexFlow-core?style=social)](https://github.com/IndexFlowing/IndexFlow-core)
 
----
+[🌐 Website](https://www.indexflowing.com) 
+[📖 Documentation](https://docs.rs/indexflow-seo) 
 
-## Production case studies
+[简体中文](README.zh-CN.md)
 
-IndexFlow is not a toy. It already runs in production against hundreds of thousands of pages:
+# 🚀 What is IndexFlow?
 
-- **[Mandarin Clips](https://www.mandarinclips.com)** — large-scale Mandarin learning and video-corpus site, **230,000+** pages under continuous scheduling
-- **[Inkvilion](https://www.inkvilion.com)** — multilingual dictionary and online tools, **10,000+** pages fully automated
+IndexFlow is an open-source **SEO and Search Indexing Infrastructure** built with Rust.
 
----
+Modern websites are no longer competing only for traditional search rankings.
 
-## Why IndexFlow?
+With the rise of:
 
-Sitemap submission tools break down once a site reaches tens or hundreds of thousands of URLs:
+- Google Search
+- AI Search (ChatGPT Search, Perplexity, Claude)
+- Generative Engine Optimization (GEO)
 
-1. **Google Indexing API quota is tiny** — 200 URLs per project per day. Overflow stalls the entire queue.
-2. **Submitting junk hurts the whole domain** — 404s, noindex pages, and canonical mismatches waste quota and can damage crawl trust.
-3. **Engines do not move at the same speed** — Bing (IndexNow) can take tens of thousands of URLs in a day; Google cannot. Shared progress bars mix those two clocks.
-4. **Large sites starve small ones** — a single fat queue monopolizes the worker.
+developers need better infrastructure to understand:
 
-IndexFlow is built around those constraints, not around a demo sitemap.
+- How search engines discover websites
+- Whether websites are technically optimized
+- How content can be better understood by machines
 
----
+IndexFlow provides lightweight, developer-friendly Rust libraries and tools for building better search visibility.
 
-## Features
-
-- **Rust core** — Axum + Tokio + SQLx. Low memory, high concurrency, millions of URL rows and state transitions.
-- **4 independent workspaces** under a persistent site header
-  - **Sitemap Assets** — recursive XML / sitemap-index parser; locale, path prefix, lastmod, priority
-  - **SEO Quality Gate** — standalone HTTP scanner (200, `<title>`, description, canonical, robots, H1). Does not enqueue submit workers
-  - **Engine Submissions** — Bing IndexNow batches vs Google Indexing API (rolling 24h quota) as separate queues
-  - **Index Monitoring** — GSC Search Analytics harvest + URL Inspection funnel (2,000/day)
-- **GSC quota exemption** — pages with Search Analytics impressions &gt; 0 are tagged `INDEXED` / `google_status=SUBMITTED` and skip the daily 200 Indexing API slots
-- **Per-URL diagnostics drawer** — live Re-check SEO, Submit to Bing/Google Now, meta signals, GSC coverage, raw API bodies
-- **Cloudflare WAF bypass** — all page crawlers send a custom internal User-Agent
-- **Multi-site fair scheduling** — windowed, partitioned claim so one large site cannot monopolize workers
-- **Quota circuit breaker** — exhausted Google work sleeps until the next free slot. No busy-loop HTTP probes.
-- **3-state conservation lifecycle** — `PENDING` + `SUBMITTED` + `BLOCKED` = `TOTAL`
-
-Credential states: **Unset** / **Saved** / **Verified**. Submit only runs against verified channels.
-
-![Dashboard](./images/首页.png)
 
 ---
 
-## Tech stack
+# 🎯 Why IndexFlow?
 
-| Layer | Stack | Role |
-| :--- | :--- | :--- |
-| **Core engine** | Rust 2021, Axum, Tokio, SQLx | Async workers, state machine, API |
-| **Workbench** | Next.js 15 (App Router), Tailwind CSS | Dark console, per-site workflow |
-| **Database** | PostgreSQL 14+ | Lifecycle, partitioned indexes, optimistic locks |
-| **Auth** | JWT + Google Service Account OAuth2 | Single-tenant admin + isolated credentials |
+Building and growing a website involves many invisible technical challenges.
+
+
+## 🔍 Search Discovery
+
+Search engines need structured information to discover content efficiently.
+
+IndexFlow helps developers work with:
+
+- XML Sitemap
+- URL structures
+- Search indexing workflows
+
+
+## ⚙️ Technical SEO
+
+Many indexing problems come from hidden technical issues:
+
+- Missing canonical tags
+- Incorrect robots directives
+- Invalid metadata
+- Poor website structures
+
+IndexFlow provides tools to analyze and identify potential SEO issues.
+
+
+## 🤖 AI Search Era
+
+Search is changing.
+
+AI systems increasingly rely on:
+
+- Structured data
+- Clear website architecture
+- Machine-readable content
+
+IndexFlow aims to provide infrastructure for the next generation of website discovery.
+
 
 ---
 
-## Self-hosting
+# 🏗️ Architecture
 
-### Requirements
-
-- Rust 1.75+
-- PostgreSQL 14+
-- Node.js 18+ (only if you rebuild the UI)
-
-### Environment
-
-Create a `.env` in the backend root:
-
-```env
-# Listen
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-
-# Database
-DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/indexflow
-
-# Google rolling 24-hour quota (default 200)
-GOOGLE_DAILY_QUOTA=200
-
-# GSC URL Inspection API rolling 24-hour quota (default 2000)
-GSC_INSPECT_DAILY_QUOTA=2000
-
-# Scheduler and worker throttle
-SCHEDULER_INTERVAL_SECS=60
-SUBMIT_WORKER_BATCH=50
-SUBMIT_WORKER_INTERVAL_SECS=2
-
-# JWT signing secret
-JWT_SECRET=your-secure-jwt-secret-key-change-me
+IndexFlow is designed as a reusable Rust ecosystem.
 ```
+                IndexFlow
+    
+                    |
+    ---------------------------------
+    |                               |
 
-On first boot, SQLx applies `migrations/` automatically.
+indexflow-sitemap                 indexflow-seo
 
-### Run
+XML Sitemap Parser              Technical SEO Analyzer
 
-```bash
-# Optional: rebuild the static workbench
-cd ui && npm install && npm run build && cd ..
+    |                               |
+    
+    ---------------------------------
+    
+              IndexFlow Platform
+The open-source libraries provide the foundation.
 
-cargo run
-```
+The commercial platform will build additional capabilities on top of these components.
 
-On Windows, `start.ps1` builds `ui/out` if needed and starts the API. Open `http://127.0.0.1:<SERVER_PORT>/` (default in this repo: **8010**). The first visit prompts you to create the admin account. After that, add a site, paste an IndexNow key and/or Google Service Account JSON, click **Test Bing** / **Test Google** until the channel is **Verified**. Add the same service-account email as a user on the Search Console property for GSC sync. Then use the four workspace tabs independently: sync sitemap, run SEO audit, submit Bing/Google, sync indexed URLs from GSC.
-
-### Tests
-
-```bash
-cargo check
-cargo test
 ```
 
 ---
 
-## How it works
+# 📦 Open Source Components
 
-```
-[ Module 1: Sitemap Assets ]  ── source of truth (SYNC_SITEMAP only)
-            │
-            ├──► [ Module 2: SEO Quality Gate ]   CHECK_URL  (standalone)
-            ├──► [ Module 3: Push Pipelines ]     SUBMIT_BING / SUBMIT_GOOGLE
-            └──► [ Module 4: Index Monitor ]      GSC Analytics + GSC_INSPECT
-```
 
-- Sitemap sync never enqueues SEO or submit workers.
-- SEO audit never enqueues Bing/Google submit.
-- GSC Search Analytics (impressions &gt; 0) marks `google_index_status=INDEXED` and exempts those URLs from the Google Indexing API quota.
-- GSC URL Inspection fills the funnel: Indexed / Crawled-not-indexed / Discovered-not-indexed / Unknown (max 2,000/day).
-- Click a URL in any table to open the diagnostics drawer (`GET /urls/:id/analysis`, `POST /urls/:id/recheck`, `POST /urls/:id/submit-now`).
+## indexflow-sitemap
 
-Stale `PROCESSING` tasks are recovered automatically after a timeout so a crash cannot deadlock the queue.
+A lightweight Rust library for parsing and processing XML sitemaps.
+
+Features:
+
+- XML sitemap parsing
+- Sitemap index support
+- URL extraction
+- Developer-friendly API
+
+
+Crates.io:
+
+https://crates.io/crates/indexflow-sitemap
+
 
 ---
 
-## License
 
-Source-available Open Core. Use it, fork it, run it against your own sites.
+## indexflow-seo
+
+A Rust library for technical SEO analysis.
+
+Features:
+
+- HTML analysis
+- SEO metadata checking
+- Technical SEO validation
+- Extensible analyzer architecture
+
+
+Crates.io:
+
+https://crates.io/crates/indexflow-seo
+
+
+---
+
+# 💡 Design Philosophy
+
+
+## 🦀 Rust Native
+
+Built with Rust to provide:
+
+- Memory safety
+- High performance
+- Reliable infrastructure components
+- Zero-cost abstractions
+
+
+## 👨‍💻 Developer First
+
+IndexFlow is designed for developers who want:
+
+- Open-source solutions
+- Self-hosted options
+- Transparent architecture
+- Reusable libraries
+
+
+## ⚡ Lightweight Infrastructure
+
+Instead of large and complex SEO stacks, IndexFlow focuses on:
+
+- Simple deployment
+- Clear architecture
+- Composable components
+
+
+---
+
+# 🛣️ Roadmap
+
+
+## ✅ Available
+
+### indexflow-sitemap
+
+- XML sitemap parser
+- Rust library
+- Published on crates.io
+
+
+### indexflow-seo
+
+- Technical SEO analysis
+- Rust library
+- Published on crates.io
+
+
+---
+
+## 🚧 Building
+
+### IndexFlow Platform
+
+Upcoming capabilities:
+
+- Website management
+- Search indexing workflow
+- Sitemap monitoring
+- Google Search Console integration
+- IndexNow integration
+
+
+---
+
+## 🔮 Future
+
+### AI SEO Intelligence
+
+Exploring:
+
+- AI-generated SEO reports
+- GEO optimization insights
+- Website intelligence
+- Search visibility analysis
+
+
+---
+
+# 🌐 IndexFlow Platform
+
+The open-source core powers the future IndexFlow platform.
+
+IndexFlow aims to help website owners and businesses manage:
+
+- Website health
+- Search visibility
+- Indexing workflows
+- AI search optimization
+
+
+Learn more:
+
+https://www.indexflowing.com
+
+# 🚀 Built by IndexFlowing
+
+IndexFlow is built by an independent developer who is also building real-world products using modern web technologies.
+
+These projects are part of the IndexFlowing ecosystem.
+
+
+## 🎬 MandarinClips
+
+MandarinClips is an immersive Chinese learning platform that transforms movie and TV clips into real-world language learning materials.
+
+It helps learners:
+
+- Learn Chinese through authentic video clips
+- Understand real conversations
+- Explore vocabulary and expressions from native content
+
+Website:
+
+https://www.mandarinclips.com
+
+
+---
+
+
+## ✒️ InkVilion
+
+InkVilion is a Chinese language and culture learning platform focused on helping global users explore Chinese writing, names, and cultural content.
+
+Website:
+
+https://www.inkvilion.com
+
+
+---
+
+# 🤝 Contributing
+
+IndexFlow is built in the open.
+
+Contributions, discussions and feedback are welcome.
+
+If you find IndexFlow useful:
+
+⭐ Star this repository
+
+It helps the project reach more developers.
+
+
+---
+
+# 📄 License
+
+Licensed under either:
+
+- MIT License
+- Apache License 2.0
+
+at your option.
