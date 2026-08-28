@@ -17,6 +17,8 @@
 
 [简体中文](README.zh-CN.md)
 
+</div>
+
 # 🚀 What is IndexFlow?
 
 IndexFlow is an open-source **SEO and Search Indexing Infrastructure** built with Rust.

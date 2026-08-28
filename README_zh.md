@@ -19,6 +19,8 @@
 
 ---
 
+</div>
+
 # 🚀 什么是 IndexFlow？
 
 IndexFlow 是一个基于 Rust 构建的开源 **SEO 与搜索索引基础设施项目**。
@@ -42,6 +44,8 @@ IndexFlow 致力于提供轻量、可靠、开发者友好的 Rust 工具链，�
 
 
 ---
+
+</div>
 
 # 🎯 为什么需要 IndexFlow？
 
