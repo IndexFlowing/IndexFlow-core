@@ -160,14 +160,14 @@ Crates.io：
 
 ```toml
 [dependencies]
-indexflow-sitemap = "..."
+indexflow-sitemap = "0.1.1"
 ```
 
 或者：
 
 ```toml
 [dependencies]
-indexflow-seo = "..."
+indexflow-seo = "0.1.2"
 ```
 
 然后，你可以使用 IndexFlow 提供的库构建自己的 SEO 和搜索引擎索引工作流。

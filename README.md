@@ -160,14 +160,14 @@ For example:
 
 ```toml
 [dependencies]
-indexflow-sitemap = "..."
+indexflow-sitemap = "0.1.1"
 ```
 
 Or:
 
 ```toml
 [dependencies]
-indexflow-seo = "..."
+indexflow-seo = "0.1.2"
 ```
 
 Then build your own SEO and indexing workflows using the libraries provided by IndexFlow.

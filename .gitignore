@@ -5,21 +5,8 @@
 **/*.rs.bk
 *.manifest.res
 *.rc
-
-# ===============================================
-# Node.js & Next.js 前端产物 (ui/)
-# ===============================================
-node_modules/
-ui/node_modules/
-ui/.next/
-ui/out/
-ui/build/
-ui/.vercel/
-ui/*.tsbuildinfo
-ui/npm-debug.log*
-ui/yarn-debug.log*
-ui/yarn-error.log*
-ui/.pnpm-debug.log*
+/crates/indexflow-seo/target/
+/crates/indexflow-sitemap/target/
 
 # ===============================================
 # 环境变量与敏感凭证 (绝对禁止提交到 Git)
