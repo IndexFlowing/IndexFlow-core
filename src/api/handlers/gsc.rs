@@ -26,14 +26,15 @@ pub struct GscTemplate {
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
     pub is_gsc_running: bool,
-    pub is_quota_exhausted: bool, // 核心新增：是否配额耗尽
+    pub is_quota_exhausted: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Template)]
 #[template(path = "partials/gsc_action.html")]
 pub struct GscActionTemplate {
     pub is_gsc_running: bool,
-    pub is_quota_exhausted: bool, // 核心新增：是否配额耗尽
+    pub is_quota_exhausted: bool,
     pub current_site_id: i64,
 }
 
@@ -73,6 +74,7 @@ pub async fn render_gsc(
         current_site_id,
         is_gsc_running: state.site_service.is_gsc_running.load(Ordering::Relaxed),
         is_quota_exhausted,
+        dry_run: state.dry_run,
     }, set_cookie).into_response()
 }
 

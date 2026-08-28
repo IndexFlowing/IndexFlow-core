@@ -28,6 +28,7 @@ pub struct SeoTemplate {
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
     pub is_seo_running: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Template)]
@@ -76,6 +77,7 @@ pub async fn render_seo(
         all_sites,
         current_site_id,
         is_seo_running: state.site_service.is_seo_running.load(Ordering::Relaxed),
+        dry_run: state.dry_run,
     }, set_cookie).into_response()
 }
 
@@ -99,7 +101,6 @@ pub async fn action_audit_seo(
     render_seo_action(State(state), Query(q)).await
 }
 
-/// 【核心修复】使用 Json 接收选中的 ID 数组，彻底规避 Form 序列化歧义
 pub async fn action_batch_recheck_urls(
     State(state): State<AppState>,
     Json(form): Json<BatchRecheckForm>,

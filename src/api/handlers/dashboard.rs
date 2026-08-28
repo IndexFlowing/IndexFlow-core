@@ -22,6 +22,7 @@ pub struct DashboardTemplate {
     pub stats: DashboardStats,
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
+    pub dry_run: bool,
 }
 
 #[derive(Template)]
@@ -87,6 +88,7 @@ pub async fn render_dashboard(
             stats,
             all_sites,
             current_site_id,
+            dry_run: state.dry_run,
         },
         set_cookie,
     )

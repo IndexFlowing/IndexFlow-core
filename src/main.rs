@@ -10,7 +10,7 @@ mod workers;
 use crate::api::handlers::AppState;
 use crate::api::routes::build_router;
 use crate::application::{
-    GscService, HealthService, SiteService, SitemapService, SubmissionService, UrlService,
+    BingService, GscService, HealthService, SiteService, SitemapService, SubmissionService, UrlService,
 };
 use crate::config::AppConfig;
 use crate::infrastructure::{
@@ -18,7 +18,7 @@ use crate::infrastructure::{
 };
 use crate::providers::{bing::BingProvider, google::GoogleProvider};
 use crate::workers::{
-    BingSubmitWorker, GoogleSubmitWorker, GscInspectWorker, SeoAuditWorker, SyncWorker,
+    BingInspectWorker, BingSubmitWorker, GoogleSubmitWorker, GscInspectWorker, SeoAuditWorker, SyncWorker,
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    info!("IndexFlow (Pure State Machine Edition) starting...");
+    info!("IndexFlow starting...");
 
     let config = AppConfig::from_env();
     let pool = connect(&config.database_url, config.db_max_connections).await?;
@@ -43,30 +43,29 @@ async fn main() -> anyhow::Result<()> {
 
     let http = build_http_client()?;
 
-    // 4 大流水线独立控制开关（开机默认全静默待机）
     let is_sync_running = Arc::new(AtomicBool::new(false));
     let is_seo_running = Arc::new(AtomicBool::new(false));
     let is_gsc_running = Arc::new(AtomicBool::new(false));
+    let is_bing_inspect_running = Arc::new(AtomicBool::new(false));
     let is_submit_running = Arc::new(AtomicBool::new(false));
 
-    // Repositories (SQLite)
     let site_repo = SiteRepo::new(pool.clone());
     let url_repo = UrlRepo::new(pool.clone());
     let health_repo = HealthCheckRepo::new(pool.clone());
     let submission_log_repo = SubmissionLogRepo::new(pool.clone());
     let admin_repo = Arc::new(AdminRepo::new(pool.clone()));
 
-    // Search Engine Providers
-    let bing_provider = BingProvider::new(http.clone());
-    let google_provider = GoogleProvider::new(http.clone());
+    // Search Engine Providers 传入 dry_run 配置
+    let bing_provider = BingProvider::new(http.clone(), config.dry_run);
+    let google_provider = GoogleProvider::new(http.clone(), config.dry_run);
 
-    // Domain Services
     let site_service = Arc::new(SiteService::new(
         site_repo.clone(),
         url_repo.clone(),
         is_sync_running.clone(),
         is_seo_running.clone(),
         is_gsc_running.clone(),
+        is_bing_inspect_running.clone(),
         is_submit_running.clone(),
     ));
     let sitemap_service = SitemapService::new(http.clone());
@@ -78,6 +77,8 @@ async fn main() -> anyhow::Result<()> {
         site_repo.clone(),
         url_repo.clone(),
     );
+    let bing_service = BingService::new(bing_provider.clone(), url_repo.clone());
+
     let url_service = Arc::new(UrlService::new(
         url_repo.clone(),
         health_repo.clone(),
@@ -86,17 +87,17 @@ async fn main() -> anyhow::Result<()> {
         health_service.clone(),
         submission_service.clone(),
         gsc_service.clone(),
+        bing_service.clone(),
     ));
 
-    // Background Workers (纯状态机直驱)
+    // Workers
     Arc::new(SyncWorker::new(
         url_repo.clone(),
         site_repo.clone(),
         sitemap_service.clone(),
         is_sync_running.clone(),
         config.clone(),
-    ))
-    .start();
+    )).start();
 
     Arc::new(SeoAuditWorker::new(
         url_repo.clone(),
@@ -104,8 +105,7 @@ async fn main() -> anyhow::Result<()> {
         health_service,
         is_seo_running.clone(),
         config.clone(),
-    ))
-    .start();
+    )).start();
 
     Arc::new(GscInspectWorker::new(
         url_repo.clone(),
@@ -113,8 +113,15 @@ async fn main() -> anyhow::Result<()> {
         gsc_service.clone(),
         is_gsc_running.clone(),
         config.clone(),
-    ))
-    .start();
+    )).start();
+
+    Arc::new(BingInspectWorker::new(
+        url_repo.clone(),
+        site_repo.clone(),
+        bing_service.clone(),
+        is_bing_inspect_running.clone(),
+        config.clone(),
+    )).start();
 
     Arc::new(BingSubmitWorker::new(
         url_repo.clone(),
@@ -123,8 +130,7 @@ async fn main() -> anyhow::Result<()> {
         submission_service.clone(),
         is_submit_running.clone(),
         config.clone(),
-    ))
-    .start();
+    )).start();
 
     Arc::new(GoogleSubmitWorker::new(
         url_repo.clone(),
@@ -133,20 +139,24 @@ async fn main() -> anyhow::Result<()> {
         submission_service,
         is_submit_running.clone(),
         config.clone(),
-    ))
-    .start();
+    )).start();
 
-    // HTTP Router & Web App
     let state = AppState {
         site_service,
         url_service,
         admin_repo,
         jwt_secret: config.jwt_secret.clone(),
+        dry_run: config.dry_run, // 传入全局状态
     };
 
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", config.server_host, config.server_port)).await?;
-    info!(addr = %listener.local_addr()?, "IndexFlow Web Console is running at http://127.0.0.1:{}", config.server_port);
+    info!(
+        addr = %listener.local_addr()?,
+        dry_run = config.dry_run,
+        "IndexFlow Web Console is running at http://127.0.0.1:{}",
+        config.server_port
+    );
     axum::serve(listener, app).await?;
     Ok(())
 }

@@ -28,54 +28,24 @@
             <!-- 2. 抽屉可滚动内容区 -->
             <div class="flex-1 overflow-y-auto p-6 space-y-6 text-slate-200">
 
-                <!-- 【智能修复指引卡片】（仅在发生 SEO 拦截时显示） -->
-                {% if url.is_seo_fail() %}
-                <div class="bg-gradient-to-br from-rose-950/40 via-slate-900 to-slate-900 border border-rose-800/60 rounded-2xl p-5 shadow-xl space-y-2.5">
-                    <div class="flex items-center gap-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
-                        <span>💡</span>
-                        <span>技术 SEO 智能拦截诊断与修复建议</span>
-                    </div>
-                    <div class="text-xs text-rose-200 leading-relaxed space-y-1">
-                        <p class="font-semibold">拦截原因：{{ url.seo_issue.as_deref().unwrap_or("存在未通过的门禁项") }}</p>
-                        <p class="text-slate-400">
-                            {% if url.seo_issue.as_deref().unwrap_or("").contains("noindex") %}
-                            排查指南: 页面存在 <code>meta robots: noindex</code> 或 <code>X-Robots-Tag: noindex</code>，主动阻断了搜索引擎爬虫编入索引。若此页面需要收录，请移除该标签。
-                            {% else if url.seo_issue.as_deref().unwrap_or("").contains("Canonical") %}
-                            排查指南: 页面声明的 <code>&lt;link rel="canonical"&gt;</code> 目标地址与当前网页实际访问 URL 不一致，会导致搜索引擎权重分散，建议修正为规范化 URL。
-                            {% else if url.seo_issue.as_deref().unwrap_or("").contains("title") %}
-                            排查指南: 页面 <code>&lt;head&gt;</code> 中缺失 <code>&lt;title&gt;</code> 标签或标题内容为空，严重影响点击率与收录权重。
-                            {% else %}
-                            排查指南: 请检查该页面 HTTP 返回状态码是否为 200，并确认页面内容是否正常渲染。
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-                {% endif %}
-                
                 <!-- 【表格 1】：Google Search Console 官方收录状态 -->
                 <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl overflow-hidden shadow-lg">
                     <div class="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
                         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                            <span>🔍</span> Google Search Console 收录详情
+                            <span>🔍</span> Google 官方收录详情 (GSC)
                         </span>
                         <span class="text-xs text-slate-500 font-mono">
-                            查询时间: {% if let Some(t) = url.gsc_inspected_at %}{{ t }}{% else %}未检测{% endif %}
+                            查询: {% if let Some(t) = url.gsc_inspected_at %}{{ t }}{% else %}未检测{% endif %}
                         </span>
                     </div>
                     <table class="w-full text-left text-xs divide-y divide-slate-800/50">
                         <tbody class="divide-y divide-slate-800/40">
                             <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400 w-36 shrink-0">收录状态 (Status)</td>
-                                <td class="px-4 py-3 text-slate-200 font-mono">
-                                    {{ url.gsc_index_status }}
-                                </td>
+                                <td class="px-4 py-3 font-semibold text-slate-400 w-36 shrink-0">收录状态</td>
+                                <td class="px-4 py-3 text-slate-200 font-mono">{{ url.gsc_index_status }}</td>
                                 <td class="px-4 py-3 text-right w-36 shrink-0 font-sans">
                                     {% if url.gsc_index_status == "INDEXED" %}
-                                    <span class="inline-flex items-center gap-1 font-bold text-emerald-400">✓ 已编入索引</span>
-                                    {% else if url.gsc_index_status == "CRAWLED_NOT_INDEXED" %}
-                                    <span class="inline-flex items-center gap-1 font-bold text-amber-400">! 已抓取未编入</span>
-                                    {% else if url.gsc_index_status == "DISCOVERED_NOT_INDEXED" %}
-                                    <span class="inline-flex items-center gap-1 font-bold text-sky-400">⏳ 发现待抓取</span>
+                                    <span class="inline-flex items-center gap-1 font-bold text-emerald-400">✓ 已收录</span>
                                     {% else if url.gsc_index_status == "UNKNOWN" %}
                                     <span class="text-slate-500 font-mono">? 尚未检测</span>
                                     {% else %}
@@ -84,192 +54,86 @@
                                 </td>
                             </tr>
                             <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">官方覆盖明细</td>
+                                <td class="px-4 py-3 font-semibold text-slate-400">覆盖明细</td>
                                 <td class="px-4 py-3 text-slate-300 font-sans break-words" colspan="2">
-                                    {{ url.gsc_coverage_state.as_deref().unwrap_or("<无 GSC 记录>") }}
-                                </td>
-                            </tr>
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">Googlebot 爬取</td>
-                                <td class="px-4 py-3 text-slate-300 font-mono" colspan="2">
-                                    {% if let Some(t) = url.gsc_last_crawled_at %}{{ t }}{% else %}尚未抓取 / 暂无爬取记录{% endif %}
+                                    {{ url.gsc_coverage_state.as_deref().unwrap_or("<无记录>") }}
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <!-- 【表格 2】：技术 SEO 质检清单 -->
+                <!-- 【表格 2】：Bing 官方收录详情 (核心新增) -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl overflow-hidden shadow-lg">
+                    <div class="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="text-sky-400">⚡</span> Bing 官方收录详情 (Webmaster API)
+                        </span>
+                        <span class="text-xs text-slate-500 font-mono">
+                            查询: {% if let Some(t) = url.bing_inspected_at %}{{ t }}{% else %}未检测{% endif %}
+                        </span>
+                    </div>
+                    <table class="w-full text-left text-xs divide-y divide-slate-800/50">
+                        <tbody class="divide-y divide-slate-800/40">
+                            <tr class="hover:bg-slate-900/30 transition">
+                                <td class="px-4 py-3 font-semibold text-slate-400 w-36 shrink-0">收录状态</td>
+                                <td class="px-4 py-3 text-slate-200 font-mono">{{ url.bing_index_status }}</td>
+                                <td class="px-4 py-3 text-right w-36 shrink-0 font-sans">
+                                    {% if url.bing_index_status == "INDEXED" %}
+                                    <span class="inline-flex items-center gap-1 font-bold text-sky-400">✓ Bing 已收录</span>
+                                    {% else if url.bing_index_status == "UNKNOWN" %}
+                                    <span class="text-slate-500 font-mono">? 尚未检测</span>
+                                    {% else %}
+                                    <span class="inline-flex items-center gap-1 font-bold text-rose-400">✗ Bing 未收录</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/30 transition">
+                                <td class="px-4 py-3 font-semibold text-slate-400">Bing 诊断明细</td>
+                                <td class="px-4 py-3 text-slate-300 font-sans break-words" colspan="2">
+                                    {{ url.bing_coverage_state.as_deref().unwrap_or("<无记录>") }}
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/30 transition">
+                                <td class="px-4 py-3 font-semibold text-slate-400">Bingbot 抓取</td>
+                                <td class="px-4 py-3 text-slate-300 font-mono" colspan="2">
+                                    {% if let Some(t) = url.bing_last_crawled_at %}{{ t }}{% else %}暂无抓取记录{% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 【表格 3】：技术 SEO 质检门禁 -->
                 <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl overflow-hidden shadow-lg">
                     <div class="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
                         <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                             <span>🛡️</span> 技术 SEO 门禁质检
                         </span>
                         <span class="text-xs text-slate-500 font-mono">
-                            质检时间: {% if let Some(t) = url.last_checked_at %}{{ t }}{% else %}未质检{% endif %}
+                            质检: {% if let Some(t) = url.last_checked_at %}{{ t }}{% else %}未质检{% endif %}
                         </span>
                     </div>
                     <table class="w-full text-left text-xs divide-y divide-slate-800/50">
                         <tbody class="divide-y divide-slate-800/40">
-                            <!-- HTTP 状态 -->
                             <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400 w-36 shrink-0">HTTP 状态码</td>
-                                <td class="px-4 py-3 text-slate-200 font-mono">
-                                    {{ url.http_status.unwrap_or(0) }} {% if url.http_status == Some(200) %}(OK){% endif %}
-                                </td>
+                                <td class="px-4 py-3 font-semibold text-slate-400 w-36 shrink-0">HTTP 状态</td>
+                                <td class="px-4 py-3 text-slate-200 font-mono">{{ url.http_status.unwrap_or(0) }}</td>
                                 <td class="px-4 py-3 text-right w-28 shrink-0">
                                     {% if url.http_status == Some(200) %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 正常</span>
-                                    {% else if url.http_status.is_some() %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-rose-400">✗ 异常</span>
+                                    <span class="text-emerald-400 font-semibold">✓ 200 OK</span>
                                     {% else %}
-                                    <span class="text-slate-500">-</span>
+                                    <span class="text-rose-400 font-semibold">✗ 异常</span>
                                     {% endif %}
                                 </td>
                             </tr>
-                            <!-- Page Title -->
                             <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">页面标题 (Title)</td>
-                                <td class="px-4 py-3 text-slate-200 break-words font-sans font-medium">
-                                    {{ url.page_title.as_deref().unwrap_or("<未检测或缺失>") }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {% if let Some(title) = url.page_title %}
-                                        {% if !title.is_empty() %}
-                                        <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 合格</span>
-                                        {% else %}
-                                        <span class="inline-flex items-center gap-1 font-semibold text-rose-400">✗ 缺失</span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-slate-500">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            <!-- Description -->
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">描述 (Description)</td>
-                                <td class="px-4 py-3 text-slate-300 break-words font-sans">
-                                    {{ url.meta_description.as_deref().unwrap_or("<未检测或缺失>") }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {% if let Some(desc) = url.meta_description %}
-                                        {% if !desc.is_empty() %}
-                                        <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 已配置</span>
-                                        {% else %}
-                                        <span class="inline-flex items-center gap-1 text-amber-400">! 建议补充</span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-slate-500">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            <!-- H1 -->
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">H1 主标题</td>
-                                <td class="px-4 py-3 text-slate-300 break-words font-sans">
-                                    {{ url.h1_content.as_deref().unwrap_or("<未检测或缺失>") }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {% if let Some(h1) = url.h1_content %}
-                                        {% if !h1.is_empty() %}
-                                        <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 存在</span>
-                                        {% else %}
-                                        <span class="inline-flex items-center gap-1 text-amber-400">! 缺失</span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-slate-500">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            <!-- Canonical -->
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">Canonical 链接</td>
-                                <td class="px-4 py-3 text-slate-300 font-mono break-all">
-                                    {{ url.canonical_url.as_deref().unwrap_or("<未声明 Canonical>") }}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {% if let Some(canon) = url.canonical_url %}
-                                        {% if url.is_seo_fail() && url.seo_issue.as_deref().unwrap_or("").contains("Canonical") %}
-                                        <span class="inline-flex items-center gap-1 font-semibold text-rose-400">✗ 不一致</span>
-                                        {% else %}
-                                        <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 一致</span>
-                                        {% endif %}
-                                    {% else %}
-                                        <span class="text-slate-500">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            <!-- 索引门禁 -->
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-slate-400">索引门禁裁决</td>
-                                <td class="px-4 py-3 text-slate-300 font-sans">
+                                <td class="px-4 py-3 font-semibold text-slate-400">门禁裁决</td>
+                                <td class="px-4 py-3 text-slate-300 font-sans" colspan="2">
                                     {% if url.is_seo_pass() %}
-                                    <span class="text-emerald-300 font-semibold">允许收录 (未发现 noindex 阻断)</span>
-                                    {% else if url.is_seo_fail() %}
-                                    <span class="text-rose-300 font-semibold">{{ url.seo_issue.as_deref().unwrap_or("存在拦截项") }}</span>
+                                    <span class="text-emerald-400 font-semibold">准许提交 (未发现 noindex 或死链)</span>
                                     {% else %}
-                                    <span class="text-slate-500">待检测</span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    {% if url.is_seo_pass() %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 通过</span>
-                                    {% else if url.is_seo_fail() %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-rose-400">✗ 拦截</span>
-                                    {% else %}
-                                    <span class="text-slate-500">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- 【表格 3】：搜索引擎推送台账 -->
-                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl overflow-hidden shadow-lg">
-                    <div class="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
-                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                            <span>📤</span> 搜索引擎推送台账
-                        </span>
-                    </div>
-                    <table class="w-full text-left text-xs divide-y divide-slate-800/50">
-                        <tbody class="divide-y divide-slate-800/40">
-                            <!-- Bing -->
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-sky-400 w-36 shrink-0">Bing IndexNow</td>
-                                <td class="px-4 py-3 text-slate-300 font-mono">
-                                    时间: {% if let Some(t) = url.bing_submitted_at %}{{ t }}{% else %}未提交{% endif %}
-                                    {% if let Some(err) = url.bing_error %}
-                                    <div class="text-rose-400 mt-0.5">报错: {{ err }}</div>
-                                    {% endif %}
-                                </td>
-                                <td class="px-4 py-3 text-right w-28 shrink-0">
-                                    {% if url.is_bing_submitted() %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-sky-400">✓ 已提交</span>
-                                    {% else if url.bing_status == "FAILED" %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-rose-400">✗ 失败</span>
-                                    {% else %}
-                                    <span class="text-slate-500 font-mono">未提交</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-
-                            <!-- Google -->
-                            <tr class="hover:bg-slate-900/30 transition">
-                                <td class="px-4 py-3 font-semibold text-emerald-400 w-36 shrink-0">Google Indexing</td>
-                                <td class="px-4 py-3 text-slate-300 font-mono">
-                                    时间: {% if let Some(t) = url.google_submitted_at %}{{ t }}{% else %}未提交{% endif %}
-                                    {% if let Some(err) = url.google_error %}
-                                    <div class="text-rose-400 mt-0.5">报错: {{ err }}</div>
-                                    {% endif %}
-                                </td>
-                                <td class="px-4 py-3 text-right w-28 shrink-0">
-                                    {% if url.is_google_submitted() %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-emerald-400">✓ 已提交</span>
-                                    {% else if url.google_status == "FAILED" %}
-                                    <span class="inline-flex items-center gap-1 font-semibold text-rose-400">✗ 失败</span>
-                                    {% else %}
-                                    <span class="text-slate-500 font-mono">未提交</span>
+                                    <span class="text-rose-400 font-semibold">{{ url.seo_issue.as_deref().unwrap_or("存在拦截项") }}</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -284,33 +148,33 @@
                 <button hx-post="/api/v1/urls/{{ url.id }}/recheck"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
-                        hx-on::after-request="showToast('已完成该 URL 重新质检，数据已更新！')"
-                        class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700">
-                    <span>🛡️</span> SEO 重新质检
+                        hx-on::after-request="showToast('已完成该 URL 重新质检！')"
+                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700">
+                    <span>🛡️</span> SEO 质检
+                </button>
+
+                <button hx-post="/api/v1/urls/{{ url.id }}/inspect-bing"
+                        hx-target="#url-drawer-root"
+                        hx-swap="outerHTML"
+                        hx-on::after-request="showToast('Bing 官方收录查询完成！')"
+                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700">
+                    <span>⚡</span> Bing 收录检测
                 </button>
 
                 <button hx-post="/api/v1/urls/{{ url.id }}/inspect-gsc"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
-                        hx-on::after-request="showToast('已完成 GSC 实时收录查询！')"
-                        class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700">
-                    <span>🔍</span> GSC 收录查询
+                        hx-on::after-request="showToast('GSC 实时收录查询完成！')"
+                        class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700">
+                    <span>🔍</span> GSC 收录检测
                 </button>
 
                 <button hx-post="/api/v1/urls/{{ url.id }}/submit-bing"
                         hx-target="#url-drawer-root"
                         hx-swap="outerHTML"
-                        hx-on::after-request="showToast('已提交至 Bing IndexNow！')"
+                        hx-on::after-request="showToast('已推送到 Bing IndexNow！')"
                         class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold transition active:scale-95 flex items-center gap-1.5 shadow-md shadow-sky-600/20">
-                    <span>⚡</span> 提交至 Bing
-                </button>
-
-                <button hx-post="/api/v1/urls/{{ url.id }}/submit-google"
-                        hx-target="#url-drawer-root"
-                        hx-swap="outerHTML"
-                        hx-on::after-request="showToast('已提交至 Google API！')"
-                        class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition active:scale-95 flex items-center gap-1.5 shadow-md shadow-indigo-600/20">
-                    <span>🚀</span> 提交至 Google
+                    <span>⚡</span> 提交 Bing
                 </button>
             </div>
 

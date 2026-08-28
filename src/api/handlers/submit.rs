@@ -28,6 +28,7 @@ pub struct SubmitTemplate {
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
     pub is_submit_running: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Template)]
@@ -41,7 +42,7 @@ pub struct SubmitActionTemplate {
 pub struct BatchSubmitForm {
     #[serde(default)]
     pub selected_ids: Vec<i64>,
-    pub provider: String, // "bing" | "google"
+    pub provider: String,
 }
 
 pub async fn render_submit(
@@ -78,6 +79,7 @@ pub async fn render_submit(
         all_sites,
         current_site_id,
         is_submit_running: state.site_service.is_submit_running.load(Ordering::Relaxed),
+        dry_run: state.dry_run,
     }, set_cookie).into_response()
 }
 
@@ -101,7 +103,6 @@ pub async fn action_submit_all(
     render_submit_action(State(state), Query(q)).await
 }
 
-/// 【核心新增】批量向 Bing 或 Google 推送选中的 URL
 pub async fn action_batch_submit_urls(
     State(state): State<AppState>,
     Json(form): Json<BatchSubmitForm>,

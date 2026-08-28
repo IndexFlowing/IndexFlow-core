@@ -9,7 +9,6 @@ pub use oauth::GoogleAuthClient;
 use super::{SearchProvider, SubmissionResult};
 use async_trait::async_trait;
 
-/// Google 提供者统一外观门面（向后完全兼容现有所有 Service 调用）
 #[derive(Clone)]
 pub struct GoogleProvider {
     gsc: GscClient,
@@ -17,10 +16,10 @@ pub struct GoogleProvider {
 }
 
 impl GoogleProvider {
-    pub fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: reqwest::Client, dry_run: bool) -> Self {
         let auth = GoogleAuthClient::new(client.clone());
         let gsc = GscClient::new(client.clone(), auth.clone());
-        let indexing = GoogleIndexingClient::new(client, auth);
+        let indexing = GoogleIndexingClient::new(client, auth, dry_run);
 
         Self {
             gsc,

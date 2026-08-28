@@ -8,6 +8,7 @@ pub struct Site {
     pub domain: String,
     pub sitemap_url: Option<String>,
     pub bing_indexnow_key: Option<String>,
+    pub bing_webmaster_api_key: Option<String>, // 核心字段
     pub google_service_account_json: Option<String>,
     pub gsc_property_url: Option<String>,
     pub gsc_daily_quota: i64,
@@ -20,6 +21,13 @@ pub struct Site {
 impl Site {
     pub fn has_bing_credentials(&self) -> bool {
         self.bing_indexnow_key
+            .as_ref()
+            .map(|k| !k.trim().is_empty())
+            .unwrap_or(false)
+    }
+
+    pub fn has_bing_webmaster_key(&self) -> bool {
+        self.bing_webmaster_api_key
             .as_ref()
             .map(|k| !k.trim().is_empty())
             .unwrap_or(false)
@@ -58,30 +66,24 @@ impl SiteRepo {
     }
 
     pub async fn list_all(&self) -> anyhow::Result<Vec<Site>> {
-        let sites = sqlx::query_as::<_, Site>(
-            r#"SELECT * FROM sites ORDER BY id ASC"#
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let sites = sqlx::query_as::<_, Site>(r#"SELECT * FROM sites ORDER BY id ASC"#)
+            .fetch_all(&self.pool)
+            .await?;
         Ok(sites)
     }
 
     pub async fn find_by_id(&self, id: i64) -> anyhow::Result<Option<Site>> {
-        let site = sqlx::query_as::<_, Site>(
-            r#"SELECT * FROM sites WHERE id = $1"#
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let site = sqlx::query_as::<_, Site>(r#"SELECT * FROM sites WHERE id = $1"#)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
         Ok(site)
     }
 
     pub async fn get_default(&self) -> anyhow::Result<Option<Site>> {
-        let site = sqlx::query_as::<_, Site>(
-            r#"SELECT * FROM sites ORDER BY id ASC LIMIT 1"#
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let site = sqlx::query_as::<_, Site>(r#"SELECT * FROM sites ORDER BY id ASC LIMIT 1"#)
+            .fetch_optional(&self.pool)
+            .await?;
         Ok(site)
     }
 
@@ -91,6 +93,7 @@ impl SiteRepo {
         domain: &str,
         sitemap_url: Option<&str>,
         bing_indexnow_key: Option<&str>,
+        bing_webmaster_api_key: Option<&str>,
         google_service_account_json: Option<&str>,
     ) -> anyhow::Result<Site> {
         let site = if let Some(site_id) = id {
@@ -101,15 +104,17 @@ impl SiteRepo {
                     domain = $1,
                     sitemap_url = $2,
                     bing_indexnow_key = $3,
-                    google_service_account_json = $4,
+                    bing_webmaster_api_key = $4,
+                    google_service_account_json = $5,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $5
+                WHERE id = $6
                 RETURNING *
                 "#,
             )
             .bind(domain)
             .bind(sitemap_url)
             .bind(bing_indexnow_key)
+            .bind(bing_webmaster_api_key)
             .bind(google_service_account_json)
             .bind(site_id)
             .fetch_one(&self.pool)
@@ -118,15 +123,16 @@ impl SiteRepo {
             sqlx::query_as::<_, Site>(
                 r#"
                 INSERT INTO sites (
-                    domain, sitemap_url, bing_indexnow_key, google_service_account_json, updated_at
+                    domain, sitemap_url, bing_indexnow_key, bing_webmaster_api_key, google_service_account_json, updated_at
                 )
-                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
                 RETURNING *
                 "#,
             )
             .bind(domain)
             .bind(sitemap_url)
             .bind(bing_indexnow_key)
+            .bind(bing_webmaster_api_key)
             .bind(google_service_account_json)
             .fetch_one(&self.pool)
             .await?

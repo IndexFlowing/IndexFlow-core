@@ -39,7 +39,7 @@ pub struct Url {
     pub site_id: i64,
     pub url: String,
     pub url_hash: String,
-    
+
     // SEO 诊断
     pub seo_status: String,
     pub seo_issue: Option<String>,
@@ -50,18 +50,24 @@ pub struct Url {
     pub http_status: Option<i32>,
     pub locale: String,
     pub path_prefix: String,
-    
-    // GSC 收录状态
+
+    // Google 收录状态
     pub gsc_index_status: String,
     pub gsc_coverage_state: Option<String>,
     pub gsc_last_crawled_at: Option<DateTime<Utc>>,
     pub gsc_inspected_at: Option<DateTime<Utc>>,
-    
-    // 提交状态
+
+    // Bing 官方收录检测状态
+    pub bing_index_status: String,
+    pub bing_coverage_state: Option<String>,
+    pub bing_last_crawled_at: Option<DateTime<Utc>>,
+    pub bing_inspected_at: Option<DateTime<Utc>>,
+
+    // 提交记录
     pub bing_status: String,
     pub bing_submitted_at: Option<DateTime<Utc>>,
     pub bing_error: Option<String>,
-    
+
     pub google_status: String,
     pub google_submitted_at: Option<DateTime<Utc>>,
     pub google_error: Option<String>,
@@ -76,7 +82,6 @@ pub struct Url {
 
 #[allow(dead_code)]
 impl Url {
-    /// 获取友好的页面标题展示，空则回退至完整 URL
     pub fn display_title(&self) -> &str {
         if let Some(ref t) = self.page_title {
             if !t.trim().is_empty() {
@@ -90,8 +95,8 @@ impl Url {
         self.gsc_index_status == "INDEXED"
     }
 
-    pub fn is_gsc_unknown(&self) -> bool {
-        self.gsc_index_status == "UNKNOWN"
+    pub fn is_bing_indexed(&self) -> bool {
+        self.bing_index_status == "INDEXED"
     }
 
     pub fn is_seo_pass(&self) -> bool {

@@ -1,16 +1,17 @@
 use super::oauth::GoogleAuthClient;
 use crate::providers::SubmissionResult;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[derive(Clone)]
 pub struct GoogleIndexingClient {
     http: reqwest::Client,
     auth: GoogleAuthClient,
+    dry_run: bool,
 }
 
 impl GoogleIndexingClient {
-    pub fn new(http: reqwest::Client, auth: GoogleAuthClient) -> Self {
-        Self { http, auth }
+    pub fn new(http: reqwest::Client, auth: GoogleAuthClient, dry_run: bool) -> Self {
+        Self { http, auth, dry_run }
     }
 
     pub async fn submit_batch(
@@ -23,6 +24,31 @@ impl GoogleIndexingClient {
             return Ok(vec![]);
         }
 
+        // ==========================================
+        // 1. Dry-Run 演练模式分支
+        // ==========================================
+        if self.dry_run {
+            info!(
+                mode = "DRY_RUN (演练模式)",
+                domain = %domain,
+                count = urls.len(),
+                "🧪【Google Indexing 模拟提交】拦截真实请求，记录日志"
+            );
+            return Ok(urls
+                .iter()
+                .map(|url| SubmissionResult {
+                    url: url.clone(),
+                    is_success: true,
+                    status_code: Some(200),
+                    response_msg: Some("DRY_RUN_MOCK: 已演练并记录日志，未向 Google API 发起网络请求".into()),
+                    is_quota_exceeded: false,
+                })
+                .collect());
+        }
+
+        // ==========================================
+        // 2. Live 生产真实推送分支 (OAuth2 + Indexing API)
+        // ==========================================
         let token = match self
             .auth
             .get_access_token(

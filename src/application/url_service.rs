@@ -1,4 +1,4 @@
-use crate::application::{GscService, HealthService, SubmissionService};
+use crate::application::{BingService, GscService, HealthService, SubmissionService};
 use crate::domain::{ProviderKind, Url};
 use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
 use serde::Serialize;
@@ -16,6 +16,7 @@ pub struct UrlService {
     health_svc: HealthService,
     submission_svc: SubmissionService,
     gsc_svc: GscService,
+    bing_svc: BingService, // 核心新增
 }
 
 #[derive(Debug, Serialize)]
@@ -34,6 +35,7 @@ impl UrlService {
         health_svc: HealthService,
         submission_svc: SubmissionService,
         gsc_svc: GscService,
+        bing_svc: BingService,
     ) -> Self {
         Self {
             urls,
@@ -43,6 +45,7 @@ impl UrlService {
             health_svc,
             submission_svc,
             gsc_svc,
+            bing_svc,
         }
     }
 
@@ -96,14 +99,12 @@ impl UrlService {
         }))
     }
 
-    /// 【核心新增】批量并发重新质检选中的 URL
     pub async fn batch_recheck(&self, ids: &[i64]) -> anyhow::Result<usize> {
         if ids.is_empty() {
             return Ok(0);
         }
 
         info!(count = ids.len(), "🛡️ [UrlService] 正在并发批量重检选中的 URL...");
-
         let semaphore = Arc::new(Semaphore::new(10));
         let mut set = JoinSet::new();
 
@@ -131,8 +132,6 @@ impl UrlService {
                 success_count += 1;
             }
         }
-
-        info!(success_count, "✅ [UrlService] 选中的 URL 批量重检完成并落库");
         Ok(success_count)
     }
 
@@ -141,6 +140,15 @@ impl UrlService {
         let Some(site) = self.sites.find_by_id(url.site_id).await? else { return Ok(false); };
         let res = self.gsc_svc.inspect_one(&site, &url.url).await?;
         self.gsc_svc.apply_inspect_result(url.id, &res).await?;
+        Ok(res.ok)
+    }
+
+    /// 【核心新增】实时单条检测 Bing 收录状态
+    pub async fn inspect_bing_now(&self, id: i64) -> anyhow::Result<bool> {
+        let Some(url) = self.urls.find_by_id(id).await? else { return Ok(false); };
+        let Some(site) = self.sites.find_by_id(url.site_id).await? else { return Ok(false); };
+        let res = self.bing_svc.inspect_one(&site, &url.url).await?;
+        self.bing_svc.apply_inspect_result(url.id, &res).await?;
         Ok(res.ok)
     }
 

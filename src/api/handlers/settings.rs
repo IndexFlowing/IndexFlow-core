@@ -22,7 +22,9 @@ pub struct SettingsTemplate {
     pub domain: String,
     pub sitemap_url: String,
     pub bing_indexnow_key: String,
+    pub bing_webmaster_api_key: String,
     pub google_service_account_json: String,
+    pub dry_run: bool,
 }
 
 #[derive(Deserialize)]
@@ -31,6 +33,7 @@ pub struct SettingsForm {
     pub domain: String,
     pub sitemap_url: Option<String>,
     pub bing_indexnow_key: Option<String>,
+    pub bing_webmaster_api_key: Option<String>,
     pub google_service_account_json: Option<String>,
 }
 
@@ -59,7 +62,9 @@ pub async fn render_settings(
         domain: site.as_ref().map(|s| s.domain.clone()).unwrap_or_default(),
         sitemap_url: site.as_ref().and_then(|s| s.sitemap_url.clone()).unwrap_or_default(),
         bing_indexnow_key: site.as_ref().and_then(|s| s.bing_indexnow_key.clone()).unwrap_or_default(),
+        bing_webmaster_api_key: site.as_ref().and_then(|s| s.bing_webmaster_api_key.clone()).unwrap_or_default(),
         google_service_account_json: site.as_ref().and_then(|s| s.google_service_account_json.clone()).unwrap_or_default(),
+        dry_run: state.dry_run,
     }, set_cookie).into_response()
 }
 
@@ -74,6 +79,7 @@ pub async fn handle_save_settings(
         &form.domain,
         form.sitemap_url.as_deref().filter(|s| !s.trim().is_empty()),
         form.bing_indexnow_key.as_deref().filter(|s| !s.trim().is_empty()),
+        form.bing_webmaster_api_key.as_deref().filter(|s| !s.trim().is_empty()),
         form.google_service_account_json.as_deref().filter(|s| !s.trim().is_empty()),
     ).await;
 

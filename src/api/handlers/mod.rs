@@ -25,6 +25,7 @@ pub struct AppState {
     pub url_service: Arc<UrlService>,
     pub admin_repo: Arc<AdminRepo>,
     pub jwt_secret: String,
+    pub dry_run: bool, // 核心新增
 }
 
 #[derive(Debug, Serialize, Deserialize)]

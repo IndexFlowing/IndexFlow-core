@@ -9,6 +9,7 @@ pub struct SiteService {
     pub is_sync_running: Arc<AtomicBool>,
     pub is_seo_running: Arc<AtomicBool>,
     pub is_gsc_running: Arc<AtomicBool>,
+    pub is_bing_inspect_running: Arc<AtomicBool>, // 核心新增
     pub is_submit_running: Arc<AtomicBool>,
 }
 
@@ -19,6 +20,7 @@ impl SiteService {
         is_sync_running: Arc<AtomicBool>,
         is_seo_running: Arc<AtomicBool>,
         is_gsc_running: Arc<AtomicBool>,
+        is_bing_inspect_running: Arc<AtomicBool>,
         is_submit_running: Arc<AtomicBool>,
     ) -> Self {
         Self {
@@ -27,6 +29,7 @@ impl SiteService {
             is_sync_running,
             is_seo_running,
             is_gsc_running,
+            is_bing_inspect_running,
             is_submit_running,
         }
     }
@@ -50,9 +53,10 @@ impl SiteService {
         domain: &str,
         sitemap_url: Option<&str>,
         bing_key: Option<&str>,
+        bing_webmaster_key: Option<&str>,
         google_json: Option<&str>,
     ) -> anyhow::Result<Site> {
-        self.sites.save_or_update(id, domain, sitemap_url, bing_key, google_json).await
+        self.sites.save_or_update(id, domain, sitemap_url, bing_key, bing_webmaster_key, google_json).await
     }
 
     pub async fn delete_site(&self, id: i64) -> anyhow::Result<()> {
@@ -78,6 +82,11 @@ impl SiteService {
         Ok(true)
     }
 
+    pub async fn trigger_bing_inspect(&self) -> anyhow::Result<bool> {
+        self.is_bing_inspect_running.store(true, Ordering::Relaxed);
+        Ok(true)
+    }
+
     pub async fn trigger_submit_all(&self) -> anyhow::Result<bool> {
         self.is_submit_running.store(true, Ordering::Relaxed);
         Ok(true)
@@ -95,6 +104,11 @@ impl SiteService {
 
     pub async fn cancel_gsc(&self) -> anyhow::Result<u64> {
         self.is_gsc_running.store(false, Ordering::Relaxed);
+        Ok(0)
+    }
+
+    pub async fn cancel_bing_inspect(&self) -> anyhow::Result<u64> {
+        self.is_bing_inspect_running.store(false, Ordering::Relaxed);
         Ok(0)
     }
 

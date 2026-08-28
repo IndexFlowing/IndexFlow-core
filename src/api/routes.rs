@@ -20,11 +20,32 @@ use super::handlers::{
     AppState,
 };
 use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
+
+pub async fn action_inspect_bing(State(state): State<AppState>) -> Response {
+    let _ = state.site_service.trigger_bing_inspect().await;
+    (StatusCode::OK, Json(serde_json::json!({ "success": true }))).into_response()
+}
+
+pub async fn action_cancel_bing(State(state): State<AppState>) -> Response {
+    let _ = state.site_service.cancel_bing_inspect().await;
+    (StatusCode::OK, Json(serde_json::json!({ "cancelled": true }))).into_response()
+}
+
+pub async fn action_inspect_url_bing(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Response {
+    let _ = state.url_service.inspect_bing_now(id).await;
+    render_url_detail_modal(State(state), Path(id)).await
+}
 
 pub fn build_router(state: AppState) -> Router {
     let web_pages = Router::new()
@@ -52,6 +73,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/actions/inspect-gsc", post(action_inspect_gsc))
         .route("/actions/sync-gsc-analytics", post(action_sync_gsc_analytics))
         .route("/actions/cancel-gsc", post(action_cancel_gsc))
+        .route("/actions/inspect-bing", post(action_inspect_bing))
+        .route("/actions/cancel-bing", post(action_cancel_bing))
         .route("/actions/audit-seo", post(action_audit_seo))
         .route("/actions/cancel-seo", post(action_cancel_seo))
         .route("/actions/submit-all", post(action_submit_all))
@@ -61,6 +84,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/urls/batch-recheck", post(action_batch_recheck_urls))
         .route("/urls/batch-submit", post(action_batch_submit_urls))
         .route("/urls/:id/inspect-gsc", post(action_inspect_url_gsc))
+        .route("/urls/:id/inspect-bing", post(action_inspect_url_bing))
         .route("/urls/:id/submit-bing", post(action_submit_url_bing))
         .route("/urls/:id/submit-google", post(action_submit_url_google));
 

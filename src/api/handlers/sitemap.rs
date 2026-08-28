@@ -26,6 +26,7 @@ pub struct SitemapTemplate {
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
     pub is_sync_running: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Template)]
@@ -67,6 +68,7 @@ pub async fn render_sitemap(
         all_sites,
         current_site_id,
         is_sync_running: state.site_service.is_sync_running.load(Ordering::Relaxed),
+        dry_run: state.dry_run,
     }, set_cookie).into_response()
 }
 

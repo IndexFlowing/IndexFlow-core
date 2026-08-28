@@ -12,11 +12,16 @@ pub struct AppConfig {
     pub submit_worker_interval_secs: u64,
     pub submit_worker_batch: i64,
     pub jwt_secret: String,
+    pub dry_run: bool, // 核心新增：演练模式开关
 }
 
 impl AppConfig {
     pub fn from_env() -> Self {
         dotenvy::dotenv().ok();
+
+        let dry_run = env::var("DRY_RUN")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(true); // 默认开启安全演练保护
 
         let config = Self {
             server_host: env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".into()),
@@ -35,12 +40,14 @@ impl AppConfig {
             submit_worker_batch: env_i64("SUBMIT_WORKER_BATCH", 10),
             jwt_secret: env::var("JWT_SECRET")
                 .unwrap_or_else(|_| "indexflow-secret-key-change-in-production".into()),
+            dry_run,
         };
 
         info!(
             host = %config.server_host,
             port = config.server_port,
             db = %config.database_url,
+            dry_run = config.dry_run,
             "config loaded"
         );
         config
