@@ -4,7 +4,7 @@
 //!
 //! ## Features
 //! - Zero-dependency HTML evaluation (HTTP Status, Canonical, noindex, Title, H1, Meta Description)
-//! - JSON-LD (Schema.org) structured data extraction and entity mapping
+//! - JSON-LD (Schema.org) structured data extraction and entity mapping (`@graph`, array `@type`)
 //! - OpenGraph & Twitter Card social meta parsing
 //! - AI Search Engine Bot directive auditing (GPTBot, Perplexity, Claude, Google-Extended)
 //! - Non-redirecting fast HTTP prober client (Redirects treated as gate issues)
@@ -100,24 +100,30 @@ mod tests {
         assert!(!res.has_nofollow);
         assert_eq!(res.hreflang.len(), 2);
 
-        // OpenGraph & Twitter
         assert_eq!(res.opengraph.title.as_deref(), Some("Rust Monolith Guide"));
         assert_eq!(res.opengraph.og_type.as_deref(), Some("article"));
         assert_eq!(res.opengraph.image.as_deref(), Some("https://example.com/cover.jpg"));
         assert_eq!(res.twitter_card.card.as_deref(), Some("summary_large_image"));
 
-        // AI Bot Directives
         assert!(res.ai_directives.gptbot_blocked);
         assert!(!res.ai_directives.perplexity_blocked);
 
-        // JSON-LD Schemas
         assert_eq!(res.json_ld.len(), 2);
-        assert_eq!(res.schema_types(), vec!["Article".to_string(), "FAQPage".to_string()]);
+        assert_eq!(
+            res.schema_types(),
+            vec!["Article".to_string(), "FAQPage".to_string()]
+        );
     }
 
     #[test]
     fn test_gate_block_http_non_200() {
-        let res = evaluate_html("https://example.com/404", 404, 15, None, "<html><head><title>Not Found</title></head></html>");
+        let res = evaluate_html(
+            "https://example.com/404",
+            404,
+            15,
+            None,
+            "<html><head><title>Not Found</title></head></html>",
+        );
         assert!(!res.passed);
         assert_eq!(res.block_reason.as_deref(), Some("HTTP 404"));
     }
@@ -129,16 +135,28 @@ mod tests {
         assert!(!res.passed);
         assert!(res.has_noindex);
         assert!(res.has_nofollow);
-        assert_eq!(res.block_reason.as_deref(), Some("noindex directive present"));
+        assert_eq!(
+            res.block_reason.as_deref(),
+            Some("noindex directive present")
+        );
     }
 
     #[test]
     fn test_gate_block_x_robots_tag_header() {
         let html = r#"<html><head><title>Valid Title</title></head></html>"#;
-        let res = evaluate_html("https://example.com/page", 200, 20, Some("noindex, noarchive"), html);
+        let res = evaluate_html(
+            "https://example.com/page",
+            200,
+            20,
+            Some("noindex, noarchive"),
+            html,
+        );
         assert!(!res.passed);
         assert!(res.has_noindex);
-        assert_eq!(res.block_reason.as_deref(), Some("noindex directive present"));
+        assert_eq!(
+            res.block_reason.as_deref(),
+            Some("noindex directive present")
+        );
     }
 
     #[test]
@@ -162,22 +180,18 @@ mod tests {
 
     #[test]
     fn test_canonical_fuzzy_match() {
-        // Trailing slash loose match
         assert!(canonical_matches_page(
             "https://example.com/blog/post-1/",
             "https://example.com/blog/post-1"
         ));
-        // Port loose match
         assert!(canonical_matches_page(
             "https://example.com:443/blog/post-1",
             "https://example.com/blog/post-1"
         ));
-        // Relative path resolution
         assert!(canonical_matches_page(
             "https://example.com/blog/post-1",
             "/blog/post-1"
         ));
-        // Mismatch
         assert!(!canonical_matches_page(
             "https://example.com/blog/post-1",
             "https://example.com/blog/other"
@@ -186,7 +200,24 @@ mod tests {
 
     #[test]
     fn test_entity_decoding() {
-        assert_eq!(decode_basic_entities("Tom &amp; Jerry &#39;Special&#39;"), "Tom & Jerry 'Special'");
-        assert_eq!(decode_basic_entities("&lt;div&gt;&quot;Hello&quot;&nbsp;World&lt;/div&gt;"), "<div>\"Hello\" World</div>");
+        assert_eq!(
+            decode_basic_entities("Tom &amp; Jerry &#39;Special&#39;"),
+            "Tom & Jerry 'Special'"
+        );
+        assert_eq!(
+            decode_basic_entities("&lt;div&gt;&quot;Hello&quot;&nbsp;World&lt;/div&gt;"),
+            "<div>\"Hello\"\u{a0}World</div>"
+        );
+    }
+
+    #[test]
+    fn nested_person_type_is_not_promoted_as_page_schema() {
+        // The Article block also contains an author Person. schema_types walks
+        // only @type / @graph, not arbitrary nested objects — Person stays out.
+        let res = evaluate_html("https://example.com/guide", 200, 1, None, SAMPLE_HTML_FULL);
+        assert_eq!(
+            res.schema_types(),
+            vec!["Article".to_string(), "FAQPage".to_string()]
+        );
     }
 }

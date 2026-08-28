@@ -13,11 +13,11 @@
 ## 核心特性
 
 - 🛡️ **技术 SEO 质量门禁**：严格校验 HTTP 状态码、Canonical 规范链接等价性、`noindex`/`nofollow` 阻断指令、`<title>` 缺失及 `<h1>` 主标题。
-- 🤖 **GEO 与 AI 搜索引擎审计**：原生嗅探主流 AI 爬虫的屏蔽指令（`GPTBot`、`PerplexityBot`、`ClaudeBot`、`Google-Extended`）。
-- 📑 **Schema.org 结构化数据**：毫秒级提取 `application/ld+json` 代码块，自动映射 `@type` 实体模型（如 `Article`、`FAQPage`、`Product`）。
-- 🌐 **社交与多语言元数据**：解析 OpenGraph、Twitter Card 标签及 `xhtml:link` 多语言 hreflang 数组。
-- ⚡ **纯内存无 I/O 评估**：直接传入 HTML 字符串执行评估，适合高并发单元测试与无网络依赖的批处理质检。
-- 🚀 **可选不跟随重定向探针**：内置异步 HTTP 客户端，将 3xx 重定向直接作为门禁诊断项拦截。
+- 🤖 **GEO 与 AI 搜索引擎审计**：嗅探 `GPTBot` / `ChatGPT-User`、`PerplexityBot`、`ClaudeBot` / `anthropic-ai`、`Google-Extended` 的屏蔽指令，支持按 bot 的 `X-Robots-Tag` 以及 `none` / `noai`。
+- 📑 **Schema.org 结构化数据**：提取 `application/ld+json`，展开 `@graph` 与顶层数组，映射字符串或数组形式的 `@type`。
+- 🌐 **社交与多语言元数据**：解析 OpenGraph、Twitter Card 标签及 `link rel="alternate" hreflang` 数组。
+- ⚡ **纯内存无 I/O 评估**：字符边界安全的 HTML 扫描（中文 / Emoji 不会 panic）。引号感知切标签、无引号属性、多行 meta；可见标签扫描会跳过注释与 `<script>`/`<style>`。
+- 🚀 **可选不跟随重定向探针**：内置异步 HTTP 客户端，将 3xx 重定向作为门禁诊断项拦截，响应体上限 5 MiB。
 
 ---
 
@@ -27,22 +27,20 @@
 
 ```toml
 [dependencies]
-indexflow-seo = "0.1"
+indexflow-seo = "0.1.2"
 ```
 
 ### Feature Flags 说明
 
-- probe *（默认开启）*：启用基于 reqwest (纯 Rustls TLS) 的异步网络探测客户端 SeoProbeClient。
+- `probe` *（默认开启）*：启用基于 reqwest（纯 Rustls TLS）的异步网络探测客户端 `SeoProbeClient`。
 
-------
-
-
+---
 
 ## 快速上手
 
 ### 1. 纯内存 HTML 质检评估（零 I/O）
 
-```
+```rust
 use indexflow_seo::evaluate_html;
 
 fn main() {
@@ -89,7 +87,7 @@ fn main() {
 
 ### 2. 异步网络探测客户端（启用 probe Feature）
 
-```
+```rust
 use indexflow_seo::SeoProbeClient;
 use std::time::Duration;
 
@@ -110,26 +108,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-------
-
-
+---
 
 ## 🛡️ 质量门禁拦截规则
 
-indexflow-seo 在准许 URL 提交给搜索引擎前，会严格按照以下规则执行前置质检：
+`indexflow-seo` 在准许 URL 提交给搜索引擎前，会严格按照以下规则执行前置质检：
 
-1. **HTTP 状态码**：必须严格等于 200 OK；
-2. **Robots 阻断指令**：不得包含 <meta name="robots" content="noindex"> 或 X-Robots-Tag: noindex；
-3. **Canonical 规范链接**：声明的 Canonical 必须与实际访问 URL 等价（自动处理相对路径、大小写、默认端口 80/443 及尾部斜杠差异）；
-4. **页面标题**：必须包含非空的 <title> 元素。
+1. **HTTP 状态码**：必须严格等于 `200 OK`；
+2. **Robots 阻断指令**：不得包含 `<meta name="robots" content="noindex">`（或 `none`）或 `X-Robots-Tag: noindex`；
+3. **Canonical 规范链接**：声明的 Canonical 必须与实际访问 URL 等价（相对路径、协议相对 URL、`.` / `..`、默认端口 80/443、尾部斜杠、scheme/host 大小写、查询参数顺序、百分号解码；路径本身区分大小写）；
+4. **页面标题**：必须包含非空的 `<title>` 元素。
 
-------
+---
 
+## 更新日志
 
+### 0.1.2
+
+- 字符边界安全的 HTML 扫描：中文 / Emoji、引号内 `>`、无引号 URL 属性、多行 meta；可见标签跳过注释与 `<script>`/`<style>`。
+- JSON-LD 展开 `@graph`、顶层数组、数组型 `@type`；容忍 CDATA 包装。
+- 单次扫描实体解码（HTML Latin-1 命名实体 + `&#N;` / `&#xN;`），`&amp;lt;` 不再二次解码。
+- Canonical：查询参数排序、RFC 3986 的 `../`、协议相对 URL、`%7E` ≡ `~`。
+- GEO：AI bot 别名、`none` / `noai`、按 bot 的 `X-Robots-Tag`；探针响应体上限 5 MiB。
+
+---
 
 ## 开源协议
 
 本项目采用双重授权：
 
-- [Apache License, Version 2.0](https://www.google.com/url?sa=E&q=LICENSE-APACHE)
-- [MIT License](https://www.google.com/url?sa=E&q=LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)

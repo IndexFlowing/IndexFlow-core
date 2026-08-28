@@ -1,14 +1,22 @@
 [package]
 name = "indexflow-seo"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "High-performance Technical SEO quality gate & GEO (Generative Engine Optimization) auditor for modern search engines and AI crawlers"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/IndexFlowing/IndexFlow-core"
 homepage = "https://www.indexflowing.com"
+documentation = "https://docs.rs/indexflow-seo"
 readme = "README.md"
 keywords = ["seo", "geo", "json-ld", "canonical", "audit"]
 categories = ["web-programming", "parser-implementations"]
+include = [
+    "src/**/*",
+    "examples/**/*",
+    "Cargo.toml",
+    "README.md",
+    "README_ZH.md",
+]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
