@@ -74,6 +74,7 @@ pub struct Url {
 
     pub priority: i32,
     pub sitemap_lastmod: Option<DateTime<Utc>>,
+    pub sitemap_synced_at: Option<DateTime<Utc>>,
     pub last_checked_at: Option<DateTime<Utc>>,
     pub first_seen_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,

@@ -42,24 +42,24 @@
          hx-swap="outerHTML">
         <div id="sitemap-table-container">
         
-        <!-- 单行紧凑工具栏 (Toolbar) -->
-        <div class="px-4 py-3 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
+        <!-- 单行紧凑工具栏 -->
+        <div class="px-5 py-3.5 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
             
             <!-- 左侧：资产统计标签 -->
             <div class="flex items-center gap-2 text-xs text-slate-400">
                 <span>已索引资产清单:</span>
-                <span class="px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 font-mono font-bold text-slate-200">
+                <span class="px-2.5 py-0.5 rounded-lg bg-slate-950 border border-slate-800 font-mono font-bold text-slate-200">
                     {{ total }} 条 URL
                 </span>
             </div>
 
-            <!-- 右侧：搜索框 (h-8 对齐) -->
+            <!-- 右侧：搜索框 -->
             <form method="GET" action="/sitemap" class="flex items-center gap-2">
                 <input type="hidden" name="site_id" value="{{ current_site_id }}">
 
                 <div class="relative">
                     <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL 路径或页面标题..." 
-                           class="h-8 w-48 sm:w-64 rounded-xl border border-slate-800 bg-slate-950 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 hover:border-slate-700 focus:border-cyan-500/50 focus:outline-none transition">
+                           class="h-8 w-56 sm:w-72 rounded-xl border border-slate-800 bg-slate-950 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 hover:border-slate-700 focus:border-cyan-500/50 focus:outline-none transition">
                     <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-xs p-1">
                         ⏎
                     </button>
@@ -67,9 +67,9 @@
             </form>
         </div>
 
-        <!-- 3. 数据表格区 -->
+        <!-- 3. 数据表格区 (独立分开 Lastmod 与 系统抓取时间) -->
         {% if items.is_empty() %}
-        <div class="py-16 text-center space-y-2.5">
+        <div class="py-20 text-center space-y-2.5">
             <div class="text-3xl opacity-60">🔄</div>
             <div class="text-xs font-semibold text-slate-300">暂未发现 Sitemap 页面资产</div>
             <p class="text-[11px] text-slate-500 max-w-xs mx-auto">请确认在“站点设置”中配置了正确的 sitemap.xml 地址，并点击右上角「开始同步 Sitemap」</p>
@@ -79,47 +79,57 @@
             <table class="w-full text-left text-xs divide-y divide-slate-800/80">
                 <thead class="bg-slate-950/60 uppercase text-[10px] text-slate-400 font-semibold tracking-wider">
                     <tr>
-                        <th class="px-5 py-3 font-medium">页面 URL / 标题</th>
-                        <th class="px-5 py-3 font-medium w-32">语言 / 路径前缀</th>
-                        <th class="px-5 py-3 font-medium w-40">Sitemap 更新时间 (Lastmod)</th>
-                        <th class="px-5 py-3 font-medium w-28">调度优先级</th>
-                        <th class="px-5 py-3 font-medium w-36">首次发现时间</th>
+                        <th class="px-6 py-3.5 font-medium">页面 URL / 标题</th>
+                        <th class="px-6 py-3.5 font-medium w-36">语言 / 路径前缀</th>
+                        <th class="px-6 py-3.5 font-medium w-44">Sitemap 内容更新 (Lastmod)</th>
+                        <th class="px-6 py-3.5 font-medium w-44">系统最近抓取同步</th>
+                        <th class="px-6 py-3.5 font-medium w-28">调度优先级</th>
+                        <th class="px-6 py-3.5 font-medium w-44">首次发现时间</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/40">
                     {% for url in items %}
                     <tr hx-get="/partials/url-detail/{{ url.id }}" hx-target="#modal-container" hx-swap="innerHTML" class="hover:bg-slate-800/40 transition cursor-pointer group">
                         <!-- URL 与 标题 -->
-                        <td class="px-5 py-3 max-w-md truncate">
-                            <span class="text-slate-200 font-medium group-hover:text-cyan-400 transition block truncate text-xs">{{ url.display_title() }}</span>
-                            <span class="text-slate-500 font-mono text-[11px] block truncate mt-0.5">{{ url.url }}</span>
+                        <td class="px-6 py-3.5 min-w-0 pr-4">
+                            <span class="text-slate-100 font-medium group-hover:text-cyan-400 transition truncate text-xs block">{{ url.display_title() }}</span>
+                            <span class="text-slate-500 font-mono text-[11px] block truncate mt-1">{{ url.url }}</span>
                         </td>
 
                         <!-- 语言与路径 -->
-                        <td class="px-5 py-3 whitespace-nowrap">
+                        <td class="px-6 py-3.5 whitespace-nowrap">
                             <span class="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800">
                                 <span class="text-cyan-400">{{ url.locale }}</span> · {{ url.path_prefix }}
                             </span>
                         </td>
 
-                        <!-- Lastmod -->
-                        <td class="px-5 py-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                        <!-- 1. Sitemap 声明内容更新时间 (Lastmod) -->
+                        <td class="px-6 py-3.5 font-mono text-[11px] whitespace-nowrap">
                             {% if let Some(t) = url.sitemap_lastmod %}
-                            {{ t }}
+                            <span class="text-slate-200">{{ t }}</span>
                             {% else %}
-                            -
+                            <span class="text-slate-600">未声明</span>
                             {% endif %}
                         </td>
 
-                        <!-- 优先级 Priority Badge -->
-                        <td class="px-5 py-3 whitespace-nowrap">
+                        <!-- 2. 系统爬虫最近抓取同步时间 (Sitemap Synced At) -->
+                        <td class="px-6 py-3.5 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                            {% if let Some(t) = url.sitemap_synced_at %}
+                            <span class="text-slate-200">{{ t }}</span>
+                            {% else %}
+                            <span class="text-slate-600">尚未同步</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- 3. 优先级 Priority Badge -->
+                        <td class="px-6 py-3.5 whitespace-nowrap">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                                 优先级: {{ url.priority }}
                             </span>
                         </td>
 
-                        <!-- 首次发现时间 -->
-                        <td class="px-5 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                        <!-- 4. 首次发现时间 (First Seen At) -->
+                        <td class="px-6 py-3.5 text-slate-500 font-mono text-[11px] whitespace-nowrap">
                             {{ url.first_seen_at }}
                         </td>
                     </tr>
@@ -129,7 +139,7 @@
         </div>
 
         <!-- 4. 底部极简分页栏 -->
-        <div class="px-5 py-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 bg-slate-950/30">
+        <div class="px-6 py-3.5 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 bg-slate-950/30">
             <div>
                 共 <span class="text-slate-200 font-mono font-semibold">{{ total }}</span> 条 · 第 <span class="text-slate-200 font-mono">{{ page }}</span> / {{ (total + limit - 1) / limit }} 页
             </div>

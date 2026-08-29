@@ -47,3 +47,9 @@ Thumbs.db
 *.db
 generate-code-xml.cmd
 IndexFlow-core.xml
+
+# ===============================================
+# AgentBridge 生成的文件
+# ===============================================
+.agentbridge/
+.agentbridge.toml

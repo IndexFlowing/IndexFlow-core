@@ -42,12 +42,13 @@ impl UrlRepo {
             let row = sqlx::query_as::<_, (i64,)>(
                 r#"
                 INSERT INTO urls (
-                    site_id, url, url_hash, seo_status, priority, sitemap_lastmod,
+                    site_id, url, url_hash, seo_status, priority, sitemap_lastmod, sitemap_synced_at,
                     locale, path_prefix, first_seen_at, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, 'PENDING', $4, $5, CURRENT_TIMESTAMP, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(url_hash) DO UPDATE SET
                     sitemap_lastmod = EXCLUDED.sitemap_lastmod,
+                    sitemap_synced_at = CURRENT_TIMESTAMP,
                     priority = EXCLUDED.priority,
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING id
