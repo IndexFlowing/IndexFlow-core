@@ -49,6 +49,8 @@ pub async fn render_sitemap(
 
     let page = q.page.unwrap_or(1).max(1);
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
+
+    // 严格过滤：仅列出属于当前站点的主力 URL
     let (items, total) = state
         .url_service
         .list_filtered(

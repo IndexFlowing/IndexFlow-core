@@ -1,5 +1,5 @@
 use super::UrlRepo;
-use crate::domain::{compute_url_priority, extract_locale_and_path_prefix, hash_url, SitemapUrlEntry};
+use crate::domain::{compute_url_priority, hash_url, SitemapUrlEntry};
 use chrono::{DateTime, Utc};
 
 impl UrlRepo {
@@ -74,10 +74,7 @@ impl UrlRepo {
         Ok((inserted_count, all_ids, new_ids))
     }
 
-    /// 【核心重构】：批量将 Google 曝光池 URL 标记为 INDEXED
-    /// 1. 先尝试严格 hash 匹配；
-    /// 2. 尝试尾部斜杠/非斜杠容错匹配；
-    /// 3. 若数据库无此 URL（Sitemap 未收录但 Google 实际有曝光的孤岛页面），自动 INSERT 纳管！
+    /// 【严谨规范】：仅对已有 Sitemap 纳管的 URL 进行收录标记与容错比对，绝不反向混入历史垃圾 URL
     pub async fn batch_mark_gsc_indexed(
         &self,
         site_id: i64,
@@ -96,7 +93,7 @@ impl UrlRepo {
 
             let primary_hash = hash_url(trimmed);
 
-            // 1. 优先尝试直接匹配更新
+            // 1. 严格 hash 比对更新已有资产
             let res = sqlx::query(
                 r#"
                 UPDATE urls
@@ -118,7 +115,7 @@ impl UrlRepo {
                 continue;
             }
 
-            // 2. 容错匹配：尝试补全或去除末尾斜杠
+            // 2. 尾部斜杠容错比对更新已有资产
             let variant_url = if trimmed.ends_with('/') {
                 trimmed.trim_end_matches('/').to_string()
             } else {
@@ -144,35 +141,7 @@ impl UrlRepo {
 
             if res_var.rows_affected() > 0 {
                 total_marked += res_var.rows_affected();
-                continue;
             }
-
-            // 3. 孤岛资产反向纳管：如果表中完全没有该 URL，自动 INSERT 纳管入库！
-            let (locale, path_prefix) = extract_locale_and_path_prefix(trimmed, None);
-            let _ = sqlx::query(
-                r#"
-                INSERT INTO urls (
-                    site_id, url, url_hash, gsc_index_status, gsc_coverage_state,
-                    gsc_inspected_at, seo_status, priority, locale, path_prefix,
-                    first_seen_at, created_at, updated_at
-                )
-                VALUES ($1, $2, $3, 'INDEXED', 'Indexed (Search Analytics Auto-Discovered)', CURRENT_TIMESTAMP, 'PENDING', 80, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ON CONFLICT(url_hash) DO UPDATE SET
-                    gsc_index_status = 'INDEXED',
-                    gsc_coverage_state = 'Indexed (Search Analytics Auto-Discovered)',
-                    gsc_inspected_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                "#,
-            )
-            .bind(site_id)
-            .bind(trimmed)
-            .bind(&primary_hash)
-            .bind(&locale)
-            .bind(&path_prefix)
-            .execute(&mut *tx)
-            .await?;
-
-            total_marked += 1;
         }
 
         tx.commit().await?;

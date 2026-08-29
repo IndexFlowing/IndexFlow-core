@@ -62,7 +62,7 @@ impl UrlRepo {
         })
     }
 
-    /// 【核心升级】：支持雷达全维度组合筛选
+    /// 支持全维度条件与「孤岛资产」过滤
     pub async fn list_filtered(
         &self,
         site_id: i64,
@@ -78,17 +78,16 @@ impl UrlRepo {
         let q_pattern = query_str.map(|s| format!("%{}%", s.trim()));
 
         // 多引擎状态过滤器
-        let (f_g_indexed, f_b_indexed, f_both_indexed, f_neither_indexed, f_not_indexed, f_unknown) = match status_filter {
-            Some("G_INDEXED") | Some("INDEXED") => (true, false, false, false, false, false),
-            Some("B_INDEXED") => (false, true, false, false, false, false),
-            Some("BOTH_INDEXED") => (false, false, true, false, false, false),
-            Some("NEITHER_INDEXED") => (false, false, false, true, false, false),
-            Some("NOT_INDEXED") => (false, false, false, false, true, false),
-            Some("UNKNOWN") => (false, false, false, false, false, true),
-            _ => (false, false, false, false, false, false),
+        let (f_g_indexed, f_b_indexed, f_orphan, f_not_indexed, f_unknown) = match status_filter {
+            Some("G_INDEXED") | Some("INDEXED") => (true, false, false, false, false),
+            Some("B_INDEXED") => (false, true, false, false, false),
+            Some("ORPHAN") => (false, false, true, false, false),
+            Some("NOT_INDEXED") => (false, false, false, true, false),
+            Some("UNKNOWN") => (false, false, false, false, true),
+            _ => (false, false, false, false, false),
         };
 
-        let has_filter = f_g_indexed || f_b_indexed || f_both_indexed || f_neither_indexed || f_not_indexed || f_unknown;
+        let has_filter = f_g_indexed || f_b_indexed || f_orphan || f_not_indexed || f_unknown;
 
         let total: (i64,) = sqlx::query_as(
             r#"
@@ -100,13 +99,12 @@ impl UrlRepo {
                   NOT $4
                   OR ($5 AND gsc_index_status = 'INDEXED')
                   OR ($6 AND bing_index_status = 'INDEXED')
-                  OR ($7 AND gsc_index_status = 'INDEXED' AND bing_index_status = 'INDEXED')
-                  OR ($8 AND gsc_index_status != 'INDEXED' AND bing_index_status != 'INDEXED')
-                  OR ($9 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
-                  OR ($10 AND gsc_index_status = 'UNKNOWN' AND bing_index_status = 'UNKNOWN')
+                  OR ($7 AND sitemap_lastmod IS NULL AND (gsc_coverage_state LIKE '%Auto-Discovered%' OR gsc_coverage_state LIKE '%Search Analytics%'))
+                  OR ($8 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
+                  OR ($9 AND gsc_index_status = 'UNKNOWN')
               )
-              AND ($11 IS NULL OR bing_status = $11)
-              AND ($12 IS NULL OR google_status = $12)
+              AND ($10 IS NULL OR bing_status = $10)
+              AND ($11 IS NULL OR google_status = $11)
             "#,
         )
         .bind(site_id)
@@ -115,8 +113,7 @@ impl UrlRepo {
         .bind(has_filter)
         .bind(f_g_indexed)
         .bind(f_b_indexed)
-        .bind(f_both_indexed)
-        .bind(f_neither_indexed)
+        .bind(f_orphan)
         .bind(f_not_indexed)
         .bind(f_unknown)
         .bind(bing_filter)
@@ -134,15 +131,14 @@ impl UrlRepo {
                   NOT $4
                   OR ($5 AND gsc_index_status = 'INDEXED')
                   OR ($6 AND bing_index_status = 'INDEXED')
-                  OR ($7 AND gsc_index_status = 'INDEXED' AND bing_index_status = 'INDEXED')
-                  OR ($8 AND gsc_index_status != 'INDEXED' AND bing_index_status != 'INDEXED')
-                  OR ($9 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
-                  OR ($10 AND gsc_index_status = 'UNKNOWN' AND bing_index_status = 'UNKNOWN')
+                  OR ($7 AND sitemap_lastmod IS NULL AND (gsc_coverage_state LIKE '%Auto-Discovered%' OR gsc_coverage_state LIKE '%Search Analytics%'))
+                  OR ($8 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
+                  OR ($9 AND gsc_index_status = 'UNKNOWN')
               )
-              AND ($11 IS NULL OR bing_status = $11)
-              AND ($12 IS NULL OR google_status = $12)
+              AND ($10 IS NULL OR bing_status = $10)
+              AND ($11 IS NULL OR google_status = $11)
             ORDER BY priority ASC, id DESC
-            LIMIT $13 OFFSET $14
+            LIMIT $12 OFFSET $13
             "#,
         )
         .bind(site_id)
@@ -151,8 +147,7 @@ impl UrlRepo {
         .bind(has_filter)
         .bind(f_g_indexed)
         .bind(f_b_indexed)
-        .bind(f_both_indexed)
-        .bind(f_neither_indexed)
+        .bind(f_orphan)
         .bind(f_not_indexed)
         .bind(f_unknown)
         .bind(bing_filter)

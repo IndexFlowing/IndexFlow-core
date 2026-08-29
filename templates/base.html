@@ -18,7 +18,7 @@
         ::-webkit-scrollbar-thumb:hover { background: #334155; }
     </style>
 </head>
-<body class="min-h-full flex flex-col font-sans bg-slate-950 text-slate-100 antialiased">
+<body class="min-h-full flex flex-col font-sans bg-slate-950 text-slate-100 antialiased overflow-x-hidden">
     <!-- 全局 Toast 提示挂载容器 -->
     <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none"></div>
 
@@ -45,9 +45,9 @@
         }
     </script>
 
-    <!-- 通栏顶部导航栏 -->
-    <header class="h-16 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-40 shrink-0">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+    <!-- 通栏顶部导航栏 (全宽撑满) -->
+    <header class="h-16 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-40 shrink-0 w-full px-6 lg:px-8">
+        <div class="w-full h-full flex items-center justify-between">
             <div class="flex items-center space-x-6">
                 <a href="/?site_id={{ current_site_id }}" class="flex items-center space-x-3 group">
                     <img src="/static/logo.png" alt="IndexFlow Logo" 
@@ -87,11 +87,11 @@
         </div>
     </header>
 
-    <!-- 中间主体区域 -->
-    <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-6 items-start">
+    <!-- 中间主体区域 (全屏流式 100% 撑满，Ahrefs 风格) -->
+    <div class="flex-1 w-full flex flex-col md:flex-row items-start">
         
-        <!-- 左侧业务导航侧边栏 (精炼 4 步时序闭环) -->
-        <aside class="w-full md:w-64 bg-slate-900/90 backdrop-blur-xl border border-slate-800/80 rounded-2xl p-4 shrink-0 shadow-2xl space-y-4 md:sticky md:top-24">
+        <!-- 左侧业务导航侧边栏 (贴边固定，64 宽度) -->
+        <aside class="w-full md:w-64 bg-slate-900/90 backdrop-blur-xl border-r border-slate-800/80 p-5 shrink-0 shadow-xl space-y-5 md:min-h-[calc(100vh-4rem)] md:sticky md:top-16">
             <div>
                 <label class="block text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">当前管理网站</label>
                 {% if all_sites.len() > 0 %}
@@ -108,13 +108,13 @@
                 {% endif %}
             </div>
 
-            <nav class="space-y-1 text-xs font-medium border-t border-slate-800/80 pt-3">
+            <nav class="space-y-1 text-xs font-medium border-t border-slate-800/80 pt-4">
                 <a href="/?site_id={{ current_site_id }}" 
                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                     <span class="text-base">📊</span> 全站总览 (Dashboard)
                 </a>
 
-                <div class="pt-3 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">专属流水线工作台</div>
+                <div class="pt-4 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">专属流水线工作台</div>
 
                 <!-- 1. Sitemap 资产发现 -->
                 <a href="/sitemap?site_id={{ current_site_id }}" 
@@ -128,19 +128,19 @@
                     <span class="text-base">🛡️</span> 2. 本地 SEO 质量门禁
                 </a>
 
-                <!-- 3. 官方收录监测雷达 (先测收录) -->
+                <!-- 3. 官方收录监测雷达 -->
                 <a href="/indexing?site_id={{ current_site_id }}" 
                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                     <span class="text-base">🔍</span> 3. 官方收录监测雷达
                 </a>
 
-                <!-- 4. 搜索引擎提交流水线 (后精准推未收录) -->
+                <!-- 4. 搜索引擎提交流水线 -->
                 <a href="/submit?site_id={{ current_site_id }}" 
                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
                     <span class="text-base">🚀</span> 4. 搜索引擎提交流水线
                 </a>
 
-                <div class="pt-3 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">系统管理</div>
+                <div class="pt-4 pb-1 px-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">系统管理</div>
 
                 <a href="/settings?site_id={{ current_site_id }}" 
                    class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition">
@@ -149,14 +149,14 @@
             </nav>
         </aside>
 
-        <!-- 右侧主工作区 -->
-        <main class="flex-1 w-full min-w-0">
+        <!-- 右侧主工作区 (充满全屏，px-6 lg:px-8 py-6) -->
+        <main class="flex-1 w-full min-w-0 px-6 lg:px-8 py-6">
             {% block content %}{% endblock %}
         </main>
     </div>
 
     <!-- 底部页脚 -->
-    <footer class="border-t border-slate-900 py-6 mt-auto text-center text-xs text-slate-500 flex items-center justify-center gap-2 shrink-0">
+    <footer class="border-t border-slate-900 py-6 mt-auto text-center text-xs text-slate-500 flex items-center justify-center gap-2 shrink-0 w-full">
         <span>{{ t.footer_text }}</span>
         <span>·</span>
         <a href="https://www.indexflowing.com" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 font-medium underline underline-offset-2 transition">

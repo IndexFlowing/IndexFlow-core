@@ -91,6 +91,15 @@ impl Url {
         self.url.as_str()
     }
 
+    /// 是否为从搜索引擎反向发现的“孤岛资产”（不在当前 Sitemap 中）
+    pub fn is_orphan(&self) -> bool {
+        self.gsc_coverage_state
+            .as_deref()
+            .map(|s| s.contains("Auto-Discovered") || s.contains("Search Analytics"))
+            .unwrap_or(false)
+            && self.sitemap_lastmod.is_none()
+    }
+
     pub fn is_gsc_indexed(&self) -> bool {
         self.gsc_index_status == "INDEXED"
     }
