@@ -1,151 +1,102 @@
 {% extends "base.html" %}
-
 {% block title %}多站点与搜索引擎凭证管理 - IndexFlow{% endblock %}
-
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-6">
-    
-    <!-- 顶部说明横幅 -->
     <div class="space-y-1">
-        <h2 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>⚙️</span> 多站点与搜索引擎凭证管理
-        </h2>
-        <p class="text-xs text-slate-400">
-            管理你的多个网站资产，配置独立的 Sitemap 路径、Bing IndexNow API Key、Bing Webmaster 深度检测 Key 以及 Google 官方授权凭据。
-        </p>
+        <h2 class="text-xl font-bold text-white tracking-tight">⚙️ 多站点与搜索引擎凭证管理</h2>
+        <p class="text-xs text-slate-400">管理多个网站资产，配置 Sitemap 与搜索引擎官方凭据。</p>
     </div>
 
-    <!-- 1. 已配置站点资产列表卡片 -->
     <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
         <div class="px-5 py-3.5 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40">
-            <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <span>🌐</span> 已配置网站资产清单 ({{ all_sites.len() }})
-            </span>
-            <a href="/settings" class="text-xs text-cyan-400 hover:text-cyan-300 transition font-medium">
-                ＋ 添加新站点
-            </a>
+            <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">🌐 已配置网站资产清单 ({{ all_sites.len() }})</span>
+            <button type="button" onclick="openSiteModal()" class="text-xs text-cyan-400 hover:text-cyan-300 transition font-medium">＋ 添加新站点</button>
         </div>
-
         <div class="divide-y divide-slate-800/40 text-xs font-sans">
             {% for s in all_sites %}
             <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30 transition {% if current_site_id == s.id %}bg-slate-800/20{% endif %}">
                 <div class="space-y-1.5 min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="text-sm font-bold text-white font-mono tracking-tight">{{ s.domain }}</span>
-                        {% if current_site_id == s.id %}
-                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">当前控制台站点</span>
-                        {% endif %}
-                        {% if s.bing_ready() %}
-                        <span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">IndexNow 就绪</span>
-                        {% endif %}
-                        {% if s.has_bing_webmaster_key() %}
-                        <span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">Bing 质检就绪</span>
-                        {% endif %}
-                        {% if s.google_ready() %}
-                        <span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Google 就绪</span>
-                        {% endif %}
+                        {% if current_site_id == s.id %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">当前控制台站点</span>{% endif %}
+                        {% if s.bing_ready() %}<span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20">IndexNow 就绪</span>{% endif %}
+                        {% if s.has_bing_webmaster_key() %}<span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Bing 质检就绪</span>{% endif %}
+                        {% if s.google_ready() %}<span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Google 就绪</span>{% endif %}
                     </div>
-                    <div class="text-slate-400 font-mono text-[11px] truncate">
-                        Sitemap: <span class="text-slate-300">{{ s.sitemap_url.as_deref().unwrap_or("未配置 Sitemap") }}</span>
-                    </div>
+                    <div class="text-slate-400 font-mono text-[11px] truncate">Sitemap: <span class="text-slate-300">{{ s.sitemap_url.as_deref().unwrap_or("未配置 Sitemap") }}</span></div>
                 </div>
-
                 <div class="flex items-center gap-2 shrink-0">
-                    <a href="/settings?site_id={{ s.id }}" 
-                       class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition text-xs border border-slate-700/60">
-                        编辑凭证
-                    </a>
-                    <button hx-post="/api/v1/sites/{{ s.id }}/delete"
-                            hx-confirm="⚠️ 警告：确定要彻底删除站点 {{ s.domain }} 及其名下所有已纳管的 URL 数据吗？"
-                            hx-on::after-request="showToast('站点资产已成功删除', true); setTimeout(() => location.href='/settings', 600)"
-                            class="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 transition text-xs cursor-pointer">
-                        删除
-                    </button>
+                    <button type="button" onclick="openSiteModal(this)"
+                            data-id="{{ s.id }}" data-domain="{{ s.domain }}"
+                            data-sitemap="{{ s.sitemap_url.as_deref().unwrap_or("") }}"
+                            data-indexnow="{{ s.bing_indexnow_key.as_deref().unwrap_or("") }}"
+                            data-webmaster="{{ s.bing_webmaster_api_key.as_deref().unwrap_or("") }}"
+                            data-google="{{ s.google_service_account_json.as_deref().unwrap_or("") }}"
+                            class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition text-xs border border-slate-700/60">编辑凭证</button>
+                    <button hx-post="/api/v1/sites/{{ s.id }}/delete" hx-confirm="确定要删除站点 {{ s.domain }} 及其 URL 数据吗？"
+                            hx-on::after-request="location.href='/settings'" class="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/60 transition text-xs cursor-pointer">删除</button>
                 </div>
             </div>
             {% endfor %}
         </div>
     </div>
-
-    <!-- 2. 编辑或添加新站点表单卡片 -->
-    <form hx-post="/settings"
-          hx-swap="none"
-          hx-on::before-request="this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').innerText = '保存中...'"
-          hx-on::after-request="showToast('🎉 站点与搜索引擎凭证已成功保存！'); setTimeout(() => location.reload(), 600)"
-          class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
-        <input type="hidden" name="site_id" value="{{ editing_site_id.unwrap_or(0) }}">
-
-        <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
-            <h3 class="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                <span>📝</span>
-                <span>{% if editing_site_id.is_some() %}编辑站点凭证 (ID: #{{ editing_site_id.unwrap() }}){% else %}＋ 添加全新网站资产{% endif %}</span>
-            </h3>
-            {% if editing_site_id.is_some() %}
-            <a href="/settings" class="text-xs text-slate-400 hover:text-white transition">清空表单并新建 &rarr;</a>
-            {% endif %}
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    网站域名 (Domain) <span class="text-rose-400">*</span>
-                </label>
-                <input type="text" name="domain" value="{{ domain }}" placeholder="例如: inkvilion.com" required 
-                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
-                <p class="text-[11px] text-slate-500 mt-1">主域名（无需输入 http://）</p>
-            </div>
-
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Sitemap XML 完整地址
-                </label>
-                <input type="url" name="sitemap_url" value="{{ sitemap_url }}" placeholder="https://www.example.com/sitemap.xml" 
-                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
-                <p class="text-[11px] text-slate-500 mt-1">支持 XML 索引树与 .xml.gz 压缩包</p>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <!-- Bing IndexNow Key -->
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                    <span>Bing IndexNow Key</span>
-                    <span class="text-[11px] text-sky-400 font-mono font-normal">主动推送</span>
-                </label>
-                <input type="text" name="bing_indexnow_key" value="{{ bing_indexnow_key }}" placeholder="32位十六进制 IndexNow 密钥" 
-                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
-                <p class="text-[11px] text-slate-500 mt-1">用于向 Bing 快速推送新 URL</p>
-            </div>
-
-            <!-- Bing Webmaster API Key (核心新增) -->
-            <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                    <span>Bing Webmaster API Key</span>
-                    <span class="text-[11px] text-indigo-400 font-mono font-normal">收录检测</span>
-                </label>
-                <input type="text" name="bing_webmaster_api_key" value="{{ bing_webmaster_api_key }}" placeholder="在 Bing Webmaster 后台获取的 API 密钥" 
-                       class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none transition">
-                <p class="text-[11px] text-slate-500 mt-1">Bing 站长后台 -> 设置 -> API 访问中生成</p>
-            </div>
-        </div>
-
-        <!-- Google Service Account 密钥 JSON -->
-        <div>
-            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                <span>Google 官方服务账号密钥 (Service Account Key JSON)</span>
-                <span class="text-[11px] text-emerald-400 font-mono font-normal">GSC 收录检测</span>
-            </label>
-            <textarea name="google_service_account_json" rows="5" placeholder='{"type": "service_account", "project_id": "...", "private_key": "-----BEGIN PRIVATE KEY-----...", "client_email": "...@...iam.gserviceaccount.com"}' 
-                      class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 font-mono text-[11px] text-slate-200 placeholder-slate-600 focus:border-cyan-500 focus:outline-none transition leading-relaxed">{{ google_service_account_json }}</textarea>
-        </div>
-
-        <!-- 底部提交栏 -->
-        <div class="pt-4 border-t border-slate-800/80 flex items-center justify-end">
-            <button type="submit" 
-                    class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-semibold text-xs transition active:scale-95 shadow-lg shadow-cyan-500/20 cursor-pointer">
-                保存站点配置
-            </button>
-        </div>
-    </form>
 </div>
+
+<div id="site-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+    <div class="max-w-2xl mx-auto mt-8 bg-slate-900/95 border border-slate-800/80 rounded-2xl shadow-2xl backdrop-blur-xl">
+        <form id="site-form" hx-post="/settings" hx-swap="none"
+              hx-on::before-request="this.querySelector('[type=submit]').disabled=true; this.querySelector('[type=submit]').innerText='保存中...'"
+              hx-on::after-request="this.querySelector('[type=submit]').disabled=false; if(event.detail.successful) { location.href = event.detail.xhr.responseURL; }">
+            <input id="site-id" type="hidden" name="site_id" value="0">
+            <input id="site-domain-submit" type="hidden" name="domain" value="">
+            <div class="px-6 py-5 border-b border-slate-800/80 flex items-center justify-between">
+                <h3 id="modal-title" class="text-sm font-bold text-white">＋ 添加全新网站资产</h3>
+                <button type="button" onclick="closeSiteModal()" class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">✕</button>
+            </div>
+            <div class="p-6 space-y-5 text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div><label class="block font-semibold text-slate-300">网站域名 <span class="text-rose-400">*</span></label>
+                        <input id="site-domain" type="text" required placeholder="例如: example.com" class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+                        <p id="domain-help" class="text-[11px] text-slate-500 mt-1">主域名（无需输入 http://）</p></div>
+                    <div><label class="block font-semibold text-slate-300">Sitemap XML 完整地址</label>
+                        <input id="site-sitemap" type="url" name="sitemap_url" placeholder="https://example.com/sitemap.xml" class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"></div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div><label class="block font-semibold text-slate-300">Bing IndexNow Key</label><div class="flex gap-2 mt-2"><input id="site-indexnow" name="bing_indexnow_key" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-white focus:border-cyan-500 focus:outline-none"><button type="button" onclick="testCredential('indexnow', this)" class="shrink-0 rounded-xl border border-sky-500/30 px-3 text-sky-300">检测密钥文件</button></div><p id="indexnow-result" class="mt-1 text-[11px]"></p></div>
+                    <div><label class="block font-semibold text-slate-300">Bing Webmaster API Key</label><div class="flex gap-2 mt-2"><input id="site-webmaster" name="bing_webmaster_api_key" class="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-white focus:border-cyan-500 focus:outline-none"><button type="button" onclick="testCredential('webmaster', this)" class="shrink-0 rounded-xl border border-indigo-500/30 px-3 text-indigo-300">测试连接</button></div><p id="webmaster-result" class="mt-1 text-[11px]"></p></div>
+                </div>
+                <div><label class="block font-semibold text-slate-300">Google 官方服务账号密钥 JSON</label><div class="flex flex-col gap-2 mt-2"><textarea id="site-google" name="google_service_account_json" rows="5" class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-[11px] text-slate-200 focus:border-cyan-500 focus:outline-none"></textarea><button type="button" onclick="testCredential('google', this)" class="self-start rounded-xl border border-emerald-500/30 px-3 py-1.5 text-emerald-300">测试连接</button></div><p id="google-result" class="mt-1 text-[11px]"></p></div>
+            </div>
+            <div class="px-6 py-4 border-t border-slate-800/80 flex justify-end gap-2"><button type="button" onclick="closeSiteModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300">取消</button><button type="submit" class="px-6 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold">保存站点配置</button></div>
+        </form>
+    </div>
+</div>
+<script>
+function openSiteModal(button) {
+    const modal = document.getElementById('site-modal'), edit = button && button.dataset.id;
+    document.getElementById('site-id').value = edit || '0';
+    document.getElementById('site-domain').value = edit ? button.dataset.domain : '';
+    document.getElementById('site-domain').disabled = !!edit;
+    document.getElementById('site-domain-submit').value = edit ? button.dataset.domain : '';
+    document.getElementById('domain-help').textContent = edit ? '站点创建后域名不可修改' : '主域名（无需输入 http://）';
+    document.getElementById('site-sitemap').value = edit ? button.dataset.sitemap : '';
+    document.getElementById('site-indexnow').value = edit ? button.dataset.indexnow : '';
+    document.getElementById('site-webmaster').value = edit ? button.dataset.webmaster : '';
+    document.getElementById('site-google').value = edit ? button.dataset.google : '';
+    document.getElementById('modal-title').textContent = edit ? '编辑站点凭证' : '＋ 添加全新网站资产';
+    document.querySelector('#site-form [type=submit]').textContent = edit ? '保存修改' : '保存站点配置';
+    document.querySelectorAll('#site-modal p[id$="-result"]').forEach(x => { x.textContent = ''; x.className = 'mt-1 text-[11px]'; });
+    modal.classList.remove('hidden');
+}
+function closeSiteModal() { document.getElementById('site-modal').classList.add('hidden'); }
+async function testCredential(kind, button) {
+    const result = document.getElementById(kind + '-result');
+    result.className = 'mt-1 text-[11px] text-slate-400'; result.textContent = '⏳ 检测中...'; button.disabled = true;
+    const data = kind === 'google' ? { service_account_json: document.getElementById('site-google').value, domain: document.getElementById('site-domain').value } : kind === 'webmaster' ? { bing_webmaster_api_key: document.getElementById('site-webmaster').value, domain: document.getElementById('site-domain').value } : { bing_indexnow_key: document.getElementById('site-indexnow').value, domain: document.getElementById('site-domain').value };
+    const endpoint = kind === 'google' ? '/api/sites/test-google' : kind === 'webmaster' ? '/api/sites/test-bing-webmaster' : '/api/sites/test-indexnow';
+    try { const response = await fetch(endpoint, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); const body = await response.json(); result.className = 'mt-1 text-[11px] ' + (body.ok ? 'text-emerald-400' : 'text-rose-400'); result.textContent = (body.ok ? '✅ ' : '❌ ') + body.message; } catch (_) { result.className = 'mt-1 text-[11px] text-rose-400'; result.textContent = '❌ 连接失败：请求异常'; } finally { button.disabled = false; }
+}
+document.getElementById('site-form').addEventListener('submit', () => { document.getElementById('site-domain-submit').value = document.getElementById('site-domain').value; });
+{% if editing_site_id.is_some() %}window.addEventListener('DOMContentLoaded', () => { const button = document.querySelector('[data-id="{{ editing_site_id.unwrap() }}"]'); if (button) openSiteModal(button); });{% endif %}
+</script>
 {% endblock %}

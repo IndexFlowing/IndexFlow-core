@@ -12,6 +12,10 @@ impl BingService {
         Self { bing, urls }
     }
 
+    pub async fn test_webmaster_key(&self, key: &str, domain: &str) -> anyhow::Result<Vec<String>> {
+        self.bing.test_api_key(key, domain).await
+    }
+
     /// 执行单条 URL 在 Bing 官方的深度收录检测
     pub async fn inspect_one(
         &self,

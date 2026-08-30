@@ -35,6 +35,27 @@ impl BingProvider {
         }
     }
 
+    pub async fn test_api_key(&self, key: &str, _domain: &str) -> anyhow::Result<Vec<String>> {
+        let endpoint = format!(
+            "https://ssl.bing.com/webmaster/api.svc/json/GetUserSites?apikey={}",
+            key.trim()
+        );
+        let response = self.client.get(&endpoint).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("Bing API 返回 HTTP {}: {}", status.as_u16(), body);
+        }
+        let parsed: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|error| anyhow::anyhow!("解析 Bing API 响应失败: {error}"))?;
+        let sites = parsed.get("d").and_then(serde_json::Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("Bing API 响应缺少 d 数组"))?;
+        sites.iter().map(|site| {
+            site.get("Url").and_then(serde_json::Value::as_str).map(str::to_owned)
+                .ok_or_else(|| anyhow::anyhow!("Bing API 响应中的站点缺少 Url 字段"))
+        }).collect()
+    }
+
     /// 从内存缓存中获取已解析的 Bing 站点前缀，未命中时才调用 GetUserSites (单站仅查 1 次)
     pub async fn resolve_site_url(&self, bwt_api_key: &str, domain: &str) -> anyhow::Result<String> {
         let cache_key = format!("{}:{}", bwt_api_key.trim(), domain.trim());

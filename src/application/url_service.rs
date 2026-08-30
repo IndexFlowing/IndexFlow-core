@@ -50,6 +50,14 @@ impl UrlService {
         }
     }
 
+    pub async fn test_google_credentials(&self, service_account_json: &str, domain: &str) -> anyhow::Result<String> {
+        self.gsc_svc.test_credentials(service_account_json, domain).await
+    }
+
+    pub async fn test_bing_webmaster_key(&self, key: &str, domain: &str) -> anyhow::Result<Vec<String>> {
+        self.bing_svc.test_webmaster_key(key, domain).await
+    }
+
     pub async fn list_filtered(
         &self,
         site_id: i64,

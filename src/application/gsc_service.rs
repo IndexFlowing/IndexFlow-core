@@ -20,6 +20,10 @@ impl GscService {
         }
     }
 
+    pub async fn test_credentials(&self, service_account_json: &str, domain: &str) -> anyhow::Result<String> {
+        self.google.resolve_gsc_property(service_account_json, domain).await
+    }
+
     /// 单条 URL 深度检测
     pub async fn inspect_one(
         &self,
