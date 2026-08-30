@@ -12,7 +12,10 @@ use crate::application::{SiteService, UrlService};
 use crate::infrastructure::AdminRepo;
 use askama::Template;
 use axum::{
-    http::{header::{COOKIE, SET_COOKIE}, HeaderMap, StatusCode},
+    http::{
+        header::{COOKIE, SET_COOKIE},
+        HeaderMap, StatusCode,
+    },
     response::{Html, IntoResponse, Redirect, Response},
     Json,
 };
@@ -43,6 +46,9 @@ pub struct QueryParams {
     pub lang: Option<String>,
     pub q: Option<String>,
     pub status: Option<String>,
+    pub gsc_status: Option<String>,
+    pub bing_status: Option<String>,
+    pub orphan: Option<String>,
 }
 
 pub struct HtmlTemplate<T>(pub T, pub Option<String>);
@@ -56,7 +62,8 @@ where
             Ok(html) => {
                 let mut res = Html(html).into_response();
                 if let Some(cookie) = self.1 {
-                    res.headers_mut().insert(SET_COOKIE, cookie.parse().unwrap());
+                    res.headers_mut()
+                        .insert(SET_COOKIE, cookie.parse().unwrap());
                 }
                 res
             }
@@ -74,17 +81,18 @@ pub async fn check_auth_or_redirect(state: &AppState, headers: &HeaderMap) -> Op
         return Some(Redirect::to("/setup").into_response());
     }
 
-    let cookie_header = headers.get(COOKIE).and_then(|v| v.to_str().ok()).unwrap_or("");
-    let token = cookie_header
-        .split(';')
-        .find_map(|cookie| {
-            let mut parts = cookie.trim().splitn(2, '=');
-            if parts.next()? == "if_token" {
-                parts.next()
-            } else {
-                None
-            }
-        });
+    let cookie_header = headers
+        .get(COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let token = cookie_header.split(';').find_map(|cookie| {
+        let mut parts = cookie.trim().splitn(2, '=');
+        if parts.next()? == "if_token" {
+            parts.next()
+        } else {
+            None
+        }
+    });
 
     if let Some(t) = token {
         let key = DecodingKey::from_secret(state.jwt_secret.as_bytes());

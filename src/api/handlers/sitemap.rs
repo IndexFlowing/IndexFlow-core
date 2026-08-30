@@ -61,6 +61,8 @@ pub async fn render_sitemap(
             None,
             None,
             None,
+            false,
+            None,
             None,
         )
         .await
@@ -82,7 +84,10 @@ pub async fn render_sitemap(
             query_str: q.q,
             all_sites,
             current_site_id,
-            is_running: state.site_service.pipeline.is_running(PipelineStage::Sitemap),
+            is_running: state
+                .site_service
+                .pipeline
+                .is_running(PipelineStage::Sitemap),
             dry_run: state.dry_run,
         },
         set_cookie,

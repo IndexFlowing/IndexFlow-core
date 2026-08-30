@@ -87,6 +87,7 @@ pub struct Url {
     pub priority: i32,
     pub sitemap_lastmod: Option<DateTime<Utc>>,
     pub sitemap_synced_at: Option<DateTime<Utc>>,
+    pub discovered_via: String,
     pub last_checked_at: Option<DateTime<Utc>>,
     pub first_seen_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -106,11 +107,7 @@ impl Url {
 
     /// 是否为从搜索引擎反向发现的“孤岛资产”（不在当前 Sitemap 中）
     pub fn is_orphan(&self) -> bool {
-        self.gsc_coverage_state
-            .as_deref()
-            .map(|s| s.contains("Auto-Discovered") || s.contains("Search Analytics"))
-            .unwrap_or(false)
-            && self.sitemap_lastmod.is_none()
+        self.discovered_via == "gsc_orphan"
     }
 
     pub fn is_gsc_indexed(&self) -> bool {
@@ -129,10 +126,17 @@ impl Url {
         self.seo_status == "FAIL"
     }
 
-    pub fn is_seo_warn(&self) -> bool { self.seo_status == "WARN" }
+    pub fn is_seo_warn(&self) -> bool {
+        self.seo_status == "WARN"
+    }
 
     pub fn seo_warnings_list(&self) -> Vec<&str> {
-        self.seo_warnings.as_deref().unwrap_or("").lines().filter(|s| !s.trim().is_empty()).collect()
+        self.seo_warnings
+            .as_deref()
+            .unwrap_or("")
+            .lines()
+            .filter(|s| !s.trim().is_empty())
+            .collect()
     }
 
     pub fn is_bing_submitted(&self) -> bool {
@@ -148,6 +152,43 @@ pub fn hash_url(url: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(url.as_bytes());
     hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Url;
+    use chrono::Utc;
+
+    fn url(discovered_via: &str) -> Url {
+        let now = Utc::now();
+        Url {
+            id: 1, site_id: 1, url: "https://example.com".into(), url_hash: "hash".into(),
+            seo_status: "PENDING".into(), seo_issue: None, page_title: None, meta_description: None,
+            h1_content: None, h1_count: None, has_nofollow: false, ai_blocked_bots: None,
+            has_opengraph: false, has_twitter_card: false, schema_types: None, response_time_ms: None,
+            payload_bytes: None, has_viewport: false, html_lang: None, images_missing_alt: None,
+            seo_warnings: None, canonical_url: None, http_status: None, locale: "default".into(),
+            path_prefix: "/".into(), gsc_index_status: "UNKNOWN".into(), gsc_coverage_state: None,
+            gsc_last_crawled_at: None, gsc_inspected_at: None, bing_index_status: "UNKNOWN".into(),
+            bing_coverage_state: None, bing_last_crawled_at: None, bing_inspected_at: None,
+            bing_status: "NONE".into(), bing_submitted_at: None, bing_error: None,
+            google_status: "NONE".into(), google_submitted_at: None, google_error: None,
+            priority: 0, sitemap_lastmod: None, sitemap_synced_at: None,
+            discovered_via: discovered_via.into(), last_checked_at: None, first_seen_at: now,
+            created_at: now, updated_at: now,
+        }
+    }
+
+    #[test]
+    fn orphan_status_uses_discovery_source_only() {
+        let mut orphan = url("gsc_orphan");
+        orphan.gsc_coverage_state = Some("Auto-Discovered".into());
+        assert!(orphan.is_orphan());
+
+        let mut sitemap = url("sitemap");
+        sitemap.gsc_coverage_state = Some("Auto-Discovered".into());
+        assert!(!sitemap.is_orphan());
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -186,23 +227,21 @@ pub fn is_locale_segment(seg: &str) -> bool {
     match parts.next() {
         None => true,
         Some(rest) => {
-            let ok_len = (2..=8).contains(&rest.len()) && rest.chars().all(|c| c.is_ascii_alphanumeric());
+            let ok_len =
+                (2..=8).contains(&rest.len()) && rest.chars().all(|c| c.is_ascii_alphanumeric());
             ok_len && parts.next().is_none()
         }
     }
 }
 
 pub fn extract_locale_and_path_prefix(page_url: &str, hreflang: Option<&str>) -> (String, String) {
-    let locale_from_hreflang = hreflang
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            if s.eq_ignore_ascii_case("x-default") {
-                "default".to_string()
-            } else {
-                s.to_ascii_lowercase()
-            }
-        });
+    let locale_from_hreflang = hreflang.map(str::trim).filter(|s| !s.is_empty()).map(|s| {
+        if s.eq_ignore_ascii_case("x-default") {
+            "default".to_string()
+        } else {
+            s.to_ascii_lowercase()
+        }
+    });
 
     let path = match ParsedUrl::parse(page_url) {
         Ok(u) => u.path().to_string(),
@@ -230,7 +269,10 @@ pub fn extract_locale_and_path_prefix(page_url: &str, hreflang: Option<&str>) ->
 }
 
 fn path_from_raw(page_url: &str) -> String {
-    let rest = page_url.split_once("://").map(|(_, r)| r).unwrap_or(page_url);
+    let rest = page_url
+        .split_once("://")
+        .map(|(_, r)| r)
+        .unwrap_or(page_url);
     let path = rest.find('/').map(|i| &rest[i..]).unwrap_or("/");
     path.split(['?', '#']).next().unwrap_or("/").to_string()
 }

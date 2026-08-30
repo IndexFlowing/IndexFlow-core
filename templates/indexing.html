@@ -85,7 +85,7 @@
     <!-- 3. 表格与工具栏一体化容器 -->
     <div id="indexing-table-container"
          class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl"
-         hx-get="/indexing?site_id={{ current_site_id }}&status={{ filter_status.as_deref().unwrap_or("") }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}"
+         hx-get="/indexing?site_id={{ current_site_id }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}"
          hx-trigger="refreshTable from:body{% if is_bing_running || is_gsc_running %}, every 2.5s{% endif %}"
          hx-select="#indexing-table-container"
          hx-target="#indexing-table-container"
@@ -95,54 +95,34 @@
             <!-- 单行紧凑工具栏 -->
             <div class="px-5 py-3.5 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
                 
-                <!-- 左侧：多维分段控制器（带统计数据） -->
-                <div class="inline-flex flex-wrap items-center p-1 rounded-xl bg-slate-950 border border-slate-800/80 text-xs gap-1">
-                    <!-- 全部 -->
-                    <a href="?site_id={{ current_site_id }}" 
-                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap {% if filter_status.is_none() || filter_status.as_deref() == Some("") %}bg-slate-800 text-white font-semibold shadow-sm{% else %}text-slate-400 hover:text-slate-200{% endif %}">
-                        全部 <span class="ml-1 opacity-75 font-mono text-[11px]">{{ stats.url_total }}</span>
-                    </a>
-
-                    <!-- Google 已收录 -->
-                    <a href="?site_id={{ current_site_id }}&status=G_INDEXED" 
-                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("G_INDEXED") || filter_status.as_deref() == Some("INDEXED") %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold{% else %}text-slate-400 hover:text-emerald-400{% endif %}">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        Google 已编入 <span class="font-mono text-[11px]">{{ stats.google_indexed }}</span>
-                    </a>
-
-                    <!-- Bing 已收录 -->
-                    <a href="?site_id={{ current_site_id }}&status=B_INDEXED" 
-                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("B_INDEXED") %}bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold{% else %}text-slate-400 hover:text-sky-400{% endif %}">
-                        <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
-                        Bing 已收录 <span class="font-mono text-[11px]">{{ stats.bing_indexed }}</span>
-                    </a>
-
-                    <!-- 孤岛资产反向发现 -->
-                    <a href="?site_id={{ current_site_id }}&status=ORPHAN" 
-                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("ORPHAN") %}bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold{% else %}text-slate-400 hover:text-amber-400{% endif %}">
-                        <span>⚡</span>
-                        孤岛资产 (不在Sitemap)
-                    </a>
-
-                    <!-- Google 未编入 -->
-                    <a href="?site_id={{ current_site_id }}&status=NOT_INDEXED" 
-                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("NOT_INDEXED") %}bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold{% else %}text-slate-400 hover:text-rose-400{% endif %}">
-                        <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                        Google 未编入 <span class="font-mono text-[11px]">{{ stats.google_not_indexed }}</span>
-                    </a>
-
-                    <!-- 待检测 -->
-                    <a href="?site_id={{ current_site_id }}&status=UNKNOWN" 
-                       class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("UNKNOWN") %}bg-slate-800 text-slate-200 font-semibold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
-                        <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-                        待检测
-                    </a>
+                <!-- 三组正交筛选器，链接保留其他已激活维度 -->
+                <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                    <div class="flex flex-wrap items-center gap-1 rounded-xl bg-slate-950 border border-slate-800/80 p-1">
+                        <span class="px-2 text-slate-500">Google 收录状态</span>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status=&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if gsc_status.is_none() || gsc_status.as_deref() == Some("") %}bg-emerald-500/20 text-emerald-300{% else %}text-slate-400 hover:text-emerald-400{% endif %}">全部</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status=INDEXED&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if gsc_status.as_deref() == Some("INDEXED") %}bg-emerald-500/20 text-emerald-300{% else %}text-slate-400 hover:text-emerald-400{% endif %}">已编入索引</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status=CRAWLED_NOT_INDEXED&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if gsc_status.as_deref() == Some("CRAWLED_NOT_INDEXED") %}bg-emerald-500/20 text-emerald-300{% else %}text-slate-400 hover:text-emerald-400{% endif %}">抓取未编入</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status=DISCOVERED_NOT_INDEXED&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if gsc_status.as_deref() == Some("DISCOVERED_NOT_INDEXED") %}bg-emerald-500/20 text-emerald-300{% else %}text-slate-400 hover:text-emerald-400{% endif %}">发现待抓取</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status=NOT_INDEXED&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if gsc_status.as_deref() == Some("NOT_INDEXED") %}bg-emerald-500/20 text-emerald-300{% else %}text-slate-400 hover:text-emerald-400{% endif %}">未收录</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status=UNKNOWN&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if gsc_status.as_deref() == Some("UNKNOWN") %}bg-emerald-500/20 text-emerald-300{% else %}text-slate-400 hover:text-emerald-400{% endif %}">待检测</a>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1 rounded-xl bg-slate-950 border border-slate-800/80 p-1">
+                        <span class="px-2 text-slate-500">Bing 收录状态</span>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status=&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if bing_status.is_none() || bing_status.as_deref() == Some("") %}bg-sky-500/20 text-sky-300{% else %}text-slate-400 hover:text-sky-400{% endif %}">全部</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status=INDEXED&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if bing_status.as_deref() == Some("INDEXED") %}bg-sky-500/20 text-sky-300{% else %}text-slate-400 hover:text-sky-400{% endif %}">已收录</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status=NOT_INDEXED&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if bing_status.as_deref() == Some("NOT_INDEXED") %}bg-sky-500/20 text-sky-300{% else %}text-slate-400 hover:text-sky-400{% endif %}">未收录</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status=FAILED&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if bing_status.as_deref() == Some("FAILED") %}bg-sky-500/20 text-sky-300{% else %}text-slate-400 hover:text-sky-400{% endif %}">检测异常</a>
+                        <a href="?site_id={{ current_site_id }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status=UNKNOWN&orphan={% if orphan_only %}1{% endif %}" class="px-2 py-1 rounded-lg {% if bing_status.as_deref() == Some("UNKNOWN") %}bg-sky-500/20 text-sky-300{% else %}text-slate-400 hover:text-sky-400{% endif %}">待检测</a>
+                    </div>
+                    <a href="?site_id={{ current_site_id }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}{% else %}1{% endif %}" class="px-3 py-2 rounded-xl border {% if orphan_only %}bg-amber-500/20 text-amber-300 border-amber-500/30{% else %}border-slate-800 text-slate-400 hover:text-amber-400{% endif %}">⚡ 仅看孤岛资产</a>
                 </div>
 
                 <!-- 右侧：搜索框 -->
                 <form method="GET" action="/indexing" class="flex items-center gap-2">
                     <input type="hidden" name="site_id" value="{{ current_site_id }}">
-                    {% if let Some(st) = filter_status %}<input type="hidden" name="status" value="{{ st }}">{% endif %}
+                    {% if let Some(st) = gsc_status %}<input type="hidden" name="gsc_status" value="{{ st }}">{% endif %}
+                    {% if let Some(st) = bing_status %}<input type="hidden" name="bing_status" value="{{ st }}">{% endif %}
+                    {% if orphan_only %}<input type="hidden" name="orphan" value="1">{% endif %}
 
                     <div class="relative">
                         <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL 路径或页面标题..." 
@@ -159,7 +139,7 @@
             <div class="py-20 text-center space-y-2.5">
                 <div class="text-3xl opacity-60">🔍</div>
                 <div class="text-xs font-semibold text-slate-300">未检索到匹配的官方收录记录</div>
-                <p class="text-[11px] text-slate-500 max-w-xs mx-auto">请点击右上角按钮运行 GSC / Bing 增量收录检测</p>
+                 <p class="text-[11px] text-slate-500 max-w-xs mx-auto">孤岛资产自动发现功能尚未启用，该筛选项仅为后续自动发现能力预留。</p>
                 <a href="?site_id={{ current_site_id }}" class="inline-block text-xs text-cyan-400 hover:text-cyan-300 pt-1">清空筛选 &rarr;</a>
             </div>
             {% else %}
@@ -287,10 +267,10 @@
                 </div>
                 <div class="flex items-center gap-1.5">
                     {% if page > 1 %}
-                    <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">上一页</a>
+                    <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">上一页</a>
                     {% endif %}
                     {% if page * limit < total %}
-                    <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">下一页</a>
+                    <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">下一页</a>
                     {% endif %}
                 </div>
             </div>

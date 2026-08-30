@@ -64,6 +64,8 @@ pub async fn render_seo(
             q.status.as_deref(),
             None,
             None,
+            false,
+            None,
             None,
         )
         .await
@@ -82,7 +84,10 @@ pub async fn render_seo(
             query_str: q.q,
             all_sites,
             current_site_id,
-            is_running: state.site_service.pipeline.is_running(PipelineStage::SeoGate),
+            is_running: state
+                .site_service
+                .pipeline
+                .is_running(PipelineStage::SeoGate),
             dry_run: state.dry_run,
         },
         set_cookie,

@@ -73,24 +73,14 @@ impl UrlRepo {
         limit: i64,
         query_str: Option<&str>,
         seo_filter: Option<&str>,
-        status_filter: Option<&str>,
+        gsc_status_filter: Option<&str>,
+        bing_status_filter: Option<&str>,
+        orphan_only: bool,
         bing_filter: Option<&str>,
         google_filter: Option<&str>,
     ) -> anyhow::Result<(Vec<Url>, i64)> {
         let offset = (page.max(1) - 1) * limit;
         let q_pattern = query_str.map(|s| format!("%{}%", s.trim()));
-
-        // 多引擎状态过滤器
-        let (f_g_indexed, f_b_indexed, f_orphan, f_not_indexed, f_unknown) = match status_filter {
-            Some("G_INDEXED") | Some("INDEXED") => (true, false, false, false, false),
-            Some("B_INDEXED") => (false, true, false, false, false),
-            Some("ORPHAN") => (false, false, true, false, false),
-            Some("NOT_INDEXED") => (false, false, false, true, false),
-            Some("UNKNOWN") => (false, false, false, false, true),
-            _ => (false, false, false, false, false),
-        };
-
-        let has_filter = f_g_indexed || f_b_indexed || f_orphan || f_not_indexed || f_unknown;
 
         let total: (i64,) = sqlx::query_as(
             r#"
@@ -98,27 +88,19 @@ impl UrlRepo {
             WHERE site_id = $1
               AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
               AND ($3 IS NULL OR seo_status = $3)
-              AND (
-                  NOT $4
-                  OR ($5 AND gsc_index_status = 'INDEXED')
-                  OR ($6 AND bing_index_status = 'INDEXED')
-                  OR ($7 AND sitemap_lastmod IS NULL AND (gsc_coverage_state LIKE '%Auto-Discovered%' OR gsc_coverage_state LIKE '%Search Analytics%'))
-                  OR ($8 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
-                  OR ($9 AND gsc_index_status = 'UNKNOWN')
-              )
-              AND ($10 IS NULL OR bing_status = $10)
-              AND ($11 IS NULL OR google_status = $11)
+              AND ($4 IS NULL OR gsc_index_status = $4)
+              AND ($5 IS NULL OR bing_index_status = $5)
+              AND (NOT $6 OR discovered_via = 'gsc_orphan')
+              AND ($7 IS NULL OR bing_status = $7)
+              AND ($8 IS NULL OR google_status = $8)
             "#,
         )
         .bind(site_id)
         .bind(&q_pattern)
         .bind(seo_filter)
-        .bind(has_filter)
-        .bind(f_g_indexed)
-        .bind(f_b_indexed)
-        .bind(f_orphan)
-        .bind(f_not_indexed)
-        .bind(f_unknown)
+        .bind(gsc_status_filter)
+        .bind(bing_status_filter)
+        .bind(orphan_only)
         .bind(bing_filter)
         .bind(google_filter)
         .fetch_one(&self.pool)
@@ -130,29 +112,21 @@ impl UrlRepo {
             WHERE site_id = $1
               AND ($2 IS NULL OR url LIKE $2 OR page_title LIKE $2)
               AND ($3 IS NULL OR seo_status = $3)
-              AND (
-                  NOT $4
-                  OR ($5 AND gsc_index_status = 'INDEXED')
-                  OR ($6 AND bing_index_status = 'INDEXED')
-                  OR ($7 AND sitemap_lastmod IS NULL AND (gsc_coverage_state LIKE '%Auto-Discovered%' OR gsc_coverage_state LIKE '%Search Analytics%'))
-                  OR ($8 AND gsc_index_status IN ('NOT_INDEXED', 'CRAWLED_NOT_INDEXED', 'DISCOVERED_NOT_INDEXED'))
-                  OR ($9 AND gsc_index_status = 'UNKNOWN')
-              )
-              AND ($10 IS NULL OR bing_status = $10)
-              AND ($11 IS NULL OR google_status = $11)
+              AND ($4 IS NULL OR gsc_index_status = $4)
+              AND ($5 IS NULL OR bing_index_status = $5)
+              AND (NOT $6 OR discovered_via = 'gsc_orphan')
+              AND ($7 IS NULL OR bing_status = $7)
+              AND ($8 IS NULL OR google_status = $8)
             ORDER BY priority ASC, id DESC
-            LIMIT $12 OFFSET $13
+            LIMIT $9 OFFSET $10
             "#,
         )
         .bind(site_id)
         .bind(&q_pattern)
         .bind(seo_filter)
-        .bind(has_filter)
-        .bind(f_g_indexed)
-        .bind(f_b_indexed)
-        .bind(f_orphan)
-        .bind(f_not_indexed)
-        .bind(f_unknown)
+        .bind(gsc_status_filter)
+        .bind(bing_status_filter)
+        .bind(orphan_only)
         .bind(bing_filter)
         .bind(google_filter)
         .bind(limit)
@@ -169,5 +143,94 @@ impl UrlRepo {
             .fetch_optional(&self.pool)
             .await?;
         Ok(url)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UrlRepo;
+    use sqlx::SqlitePool;
+
+    #[tokio::test]
+    async fn list_filtered_applies_filters_and_pagination() -> anyhow::Result<()> {
+        let pool = SqlitePool::connect("sqlite::memory:").await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+
+        sqlx::query(
+            "INSERT INTO urls (site_id, url, url_hash, seo_status, page_title, gsc_index_status, bing_index_status, priority, discovered_via)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(1_i64)
+        .bind("https://example.com/first")
+        .bind("hash-first")
+        .bind("PASS")
+        .bind("First")
+        .bind("INDEXED")
+        .bind("INDEXED")
+        .bind(10_i32)
+        .bind("sitemap")
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO urls (site_id, url, url_hash, seo_status, page_title, gsc_index_status, bing_index_status, priority, discovered_via)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(1_i64)
+        .bind("https://example.com/orphan")
+        .bind("hash-orphan")
+        .bind("PASS")
+        .bind("Orphan")
+        .bind("INDEXED")
+        .bind("NOT_INDEXED")
+        .bind(20_i32)
+        .bind("gsc_orphan")
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO urls (site_id, url, url_hash, seo_status, page_title, gsc_index_status, bing_index_status, priority, discovered_via)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(1_i64)
+        .bind("https://example.com/third")
+        .bind("hash-third")
+        .bind("WARN")
+        .bind("Third")
+        .bind("UNKNOWN")
+        .bind("UNKNOWN")
+        .bind(30_i32)
+        .bind("sitemap")
+        .execute(&pool)
+        .await?;
+
+        let repo = UrlRepo::new(pool);
+
+        let (page_two, total) = repo
+            .list_filtered(1, 2, 1, None, None, None, None, false, None, None)
+            .await?;
+        assert_eq!(total, 3);
+        assert_eq!(page_two.len(), 1);
+        assert_eq!(page_two[0].url, "https://example.com/orphan");
+
+        let (filtered, total) = repo
+            .list_filtered(
+                1,
+                1,
+                50,
+                None,
+                None,
+                Some("INDEXED"),
+                Some("NOT_INDEXED"),
+                true,
+                None,
+                None,
+            )
+            .await?;
+        assert_eq!(total, 1);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].url, "https://example.com/orphan");
+
+        Ok(())
     }
 }

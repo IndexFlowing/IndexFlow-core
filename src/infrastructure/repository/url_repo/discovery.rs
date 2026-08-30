@@ -31,21 +31,16 @@ impl UrlRepo {
 
             let is_new = prev.is_none();
             let previous_lastmod = prev.and_then(|p| p.0);
-            let computed = compute_url_priority(
-                entry.priority,
-                entry.lastmod,
-                previous_lastmod,
-                is_new,
-                now,
-            );
+            let computed =
+                compute_url_priority(entry.priority, entry.lastmod, previous_lastmod, is_new, now);
 
             let row = sqlx::query_as::<_, (i64,)>(
                 r#"
                 INSERT INTO urls (
                     site_id, url, url_hash, seo_status, priority, sitemap_lastmod, sitemap_synced_at,
-                    locale, path_prefix, first_seen_at, created_at, updated_at
+                    locale, path_prefix, discovered_via, first_seen_at, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, 'PENDING', $4, $5, CURRENT_TIMESTAMP, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, 'PENDING', $4, $5, CURRENT_TIMESTAMP, $6, $7, 'sitemap', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(url_hash) DO UPDATE SET
                     sitemap_lastmod = EXCLUDED.sitemap_lastmod,
                     sitemap_synced_at = CURRENT_TIMESTAMP,
@@ -90,7 +85,9 @@ impl UrlRepo {
 
         for raw_url in urls {
             let trimmed = raw_url.trim();
-            if trimmed.is_empty() { continue; }
+            if trimmed.is_empty() {
+                continue;
+            }
 
             let primary_hash = hash_url(trimmed);
 
