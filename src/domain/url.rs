@@ -46,6 +46,18 @@ pub struct Url {
     pub page_title: Option<String>,
     pub meta_description: Option<String>,
     pub h1_content: Option<String>,
+    pub h1_count: Option<i32>,
+    pub has_nofollow: bool,
+    pub ai_blocked_bots: Option<String>,
+    pub has_opengraph: bool,
+    pub has_twitter_card: bool,
+    pub schema_types: Option<String>,
+    pub response_time_ms: Option<i32>,
+    pub payload_bytes: Option<i32>,
+    pub has_viewport: bool,
+    pub html_lang: Option<String>,
+    pub images_missing_alt: Option<i32>,
+    pub seo_warnings: Option<String>,
     pub canonical_url: Option<String>,
     pub http_status: Option<i32>,
     pub locale: String,
@@ -115,6 +127,12 @@ impl Url {
 
     pub fn is_seo_fail(&self) -> bool {
         self.seo_status == "FAIL"
+    }
+
+    pub fn is_seo_warn(&self) -> bool { self.seo_status == "WARN" }
+
+    pub fn seo_warnings_list(&self) -> Vec<&str> {
+        self.seo_warnings.as_deref().unwrap_or("").lines().filter(|s| !s.trim().is_empty()).collect()
     }
 
     pub fn is_bing_submitted(&self) -> bool {

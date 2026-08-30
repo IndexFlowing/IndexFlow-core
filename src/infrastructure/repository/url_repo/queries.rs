@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 impl UrlRepo {
     pub async fn dashboard_stats(&self, site_id: i64) -> anyhow::Result<DashboardStats> {
         let row: (
-            i64,
+             i64,
+             i64,
             i64,
             i64,
             i64,
@@ -33,6 +34,7 @@ impl UrlRepo {
                 COUNT(CASE WHEN bing_index_status IN ('UNKNOWN', 'FAILED') THEN 1 END) AS bing_uninspected,
                 COUNT(CASE WHEN seo_status = 'PASS' THEN 1 END) AS seo_passed,
                 COUNT(CASE WHEN seo_status IN ('WARN', 'FAIL') THEN 1 END) AS seo_issues,
+                COUNT(CASE WHEN seo_status = 'WARN' THEN 1 END) AS seo_warnings,
                 COUNT(CASE WHEN (bing_status = 'NONE' OR google_status = 'NONE') AND seo_status != 'FAIL' THEN 1 END) AS pending_submit,
                 COUNT(CASE WHEN datetime(gsc_inspected_at) > datetime('now', '-24 hours') THEN 1 END) AS gsc_used_24h,
                 MAX(last_checked_at) AS last_seo_scan_at
@@ -56,9 +58,10 @@ impl UrlRepo {
             bing_uninspected: row.8,
             seo_passed: row.9,
             seo_issues: row.10,
-            pending_submit: row.11,
-            gsc_used_24h: row.12,
-            last_seo_scan_at: row.13,
+            seo_warnings: row.11,
+            pending_submit: row.12,
+            gsc_used_24h: row.13,
+            last_seo_scan_at: row.14,
         })
     }
 

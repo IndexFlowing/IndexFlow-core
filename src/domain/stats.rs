@@ -14,6 +14,7 @@ pub struct DashboardStats {
     pub bing_uninspected: i64,
     pub seo_passed: i64,
     pub seo_issues: i64,
+    pub seo_warnings: i64,
     pub pending_submit: i64,
     pub gsc_used_24h: i64,
     pub last_seo_scan_at: Option<DateTime<Utc>>,

@@ -1,5 +1,5 @@
 use crate::canonical::canonical_matches_page;
-use crate::extractor::{inspect_html, RobotsTokens};
+use crate::extractor::{inspect_html, RawHtmlInspection, RobotsTokens};
 use crate::models::{AiBotDirectives, SeoAuditResult};
 use tracing::debug;
 
@@ -17,7 +17,7 @@ pub fn evaluate_html(
     let has_noindex = header_robots.noindex || inspected.has_noindex;
     let has_nofollow = header_robots.nofollow || inspected.has_nofollow;
 
-    let mut ai_directives = inspected.ai_directives;
+    let mut ai_directives = inspected.ai_directives.clone();
     ai_directives.merge(&header_ai);
 
     let robots_directive = {
@@ -36,6 +36,7 @@ pub fn evaluate_html(
     };
 
     let payload_bytes = i32::try_from(html_body.len()).unwrap_or(i32::MAX);
+    let warnings = compute_warnings(&inspected, &ai_directives);
 
     let canonical_url = inspected.canonical_url;
     let has_canonical = canonical_url.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
@@ -62,7 +63,6 @@ pub fn evaluate_html(
     };
 
     let passed = block_reason.is_none();
-
     debug!(
         url = %page_url,
         status = status_code,
@@ -90,9 +90,38 @@ pub fn evaluate_html(
         twitter_card: inspected.twitter_card,
         json_ld: inspected.json_ld,
         ai_directives,
+        has_viewport: inspected.has_viewport,
+        html_lang: inspected.html_lang,
+        images_missing_alt: inspected.images_missing_alt,
         passed,
         block_reason,
+        warnings,
     }
+}
+
+pub fn compute_warnings(inspected: &RawHtmlInspection, ai: &AiBotDirectives) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if inspected.h1_count == 0 { warnings.push("缺少 H1 标题".to_string()); }
+    if inspected.h1_count > 1 { warnings.push(format!("存在 {} 个 H1 标签，建议仅保留一个", inspected.h1_count)); }
+    if inspected.has_nofollow { warnings.push("页面带有 nofollow 指令".to_string()); }
+    let blocked = ai.blocked_names();
+    if !blocked.is_empty() { warnings.push(format!("屏蔽了以下 AI 爬虫: {}", blocked.join(", "))); }
+    let og = &inspected.opengraph;
+    if [og.title.as_ref(), og.description.as_ref(), og.image.as_ref(), og.og_type.as_ref(), og.url.as_ref(), og.site_name.as_ref()].iter().all(Option::is_none) {
+        warnings.push("缺少 OpenGraph 社交分享标签".to_string());
+    }
+    if inspected.twitter_card.card.is_none() { warnings.push("缺少 Twitter Card 标记".to_string()); }
+    if inspected.json_ld.is_empty() { warnings.push("缺少结构化数据 (JSON-LD)".to_string()); }
+    if !inspected.has_viewport { warnings.push("缺少 viewport 移动适配标签".to_string()); }
+    if inspected.html_lang.is_none() { warnings.push("未声明 <html lang> 页面语言".to_string()); }
+    if inspected.images_missing_alt > 0 { warnings.push(format!("{} 张图片缺失 alt 属性", inspected.images_missing_alt)); }
+    match inspected.meta_description.as_deref() {
+        None => warnings.push("缺少 meta description".to_string()),
+        Some(s) if !(50..=160).contains(&s.chars().count()) => warnings.push("meta description 长度不合适".to_string()),
+        _ => {}
+    }
+    if inspected.page_title.as_ref().is_some_and(|s| s.chars().count() > 60) { warnings.push("page title 长度过长，可能被截断".to_string()); }
+    warnings
 }
 
 /// Parse `X-Robots-Tag` (possibly comma-joined multi-header) into a global

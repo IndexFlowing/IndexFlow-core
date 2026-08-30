@@ -45,6 +45,15 @@ impl AiBotDirectives {
             || self.google_extended_blocked
     }
 
+    pub fn blocked_names(&self) -> Vec<&str> {
+        let mut names = Vec::new();
+        if self.gptbot_blocked { names.push("GPTBot"); }
+        if self.perplexity_blocked { names.push("PerplexityBot"); }
+        if self.claudebot_blocked { names.push("ClaudeBot"); }
+        if self.google_extended_blocked { names.push("Google-Extended"); }
+        names
+    }
+
     pub(crate) fn merge(&mut self, other: &AiBotDirectives) {
         self.gptbot_blocked |= other.gptbot_blocked;
         self.perplexity_blocked |= other.perplexity_blocked;
@@ -84,8 +93,13 @@ pub struct SeoAuditResult {
     pub json_ld: Vec<JsonLdBlock>,
     pub ai_directives: AiBotDirectives,
 
+    pub has_viewport: bool,
+    pub html_lang: Option<String>,
+    pub images_missing_alt: usize,
+
     pub passed: bool,
     pub block_reason: Option<String>,
+    pub warnings: Vec<String>,
 }
 
 impl SeoAuditResult {

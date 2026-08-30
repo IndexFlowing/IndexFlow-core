@@ -28,6 +28,9 @@ pub struct RawHtmlInspection {
     pub twitter_card: TwitterCardMeta,
     pub json_ld: Vec<JsonLdBlock>,
     pub ai_directives: AiBotDirectives,
+    pub has_viewport: bool,
+    pub html_lang: Option<String>,
+    pub images_missing_alt: usize,
 }
 
 /// Inspect `html` without allocating a full-document lowercase copy.
@@ -83,6 +86,9 @@ pub fn inspect_html(html: &str) -> RawHtmlInspection {
 
     let json_ld = extract_json_ld(html);
     let hreflangs = extract_hreflang(html);
+    let has_viewport = extract_viewport(html);
+    let html_lang = extract_html_lang(html);
+    let images_missing_alt = count_images_missing_alt(html);
 
     RawHtmlInspection {
         page_title,
@@ -98,7 +104,47 @@ pub fn inspect_html(html: &str) -> RawHtmlInspection {
         twitter_card,
         json_ld,
         ai_directives,
+        has_viewport,
+        html_lang,
+        images_missing_alt,
     }
+}
+
+pub fn extract_viewport(html: &str) -> bool {
+    let html = clip_html(html);
+    let mut search_from = 0;
+    while let Some(abs) = find_open_tag(html, search_from, "meta", true) {
+        let Some(end) = find_tag_end(html, abs) else { break };
+        if let Some(tag) = safe_slice(html, abs, end.saturating_add(1)) {
+            if attr_value(tag, "name").is_some_and(|v| v.eq_ignore_ascii_case("viewport")) {
+                return true;
+            }
+        }
+        search_from = clamp_boundary(html, end.saturating_add(1));
+    }
+    false
+}
+
+pub fn extract_html_lang(html: &str) -> Option<String> {
+    let html = clip_html(html);
+    let abs = find_open_tag(html, 0, "html", false)?;
+    let end = find_tag_end(html, abs)?;
+    let tag = safe_slice(html, abs, end.saturating_add(1))?;
+    attr_value(tag, "lang").map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+pub fn count_images_missing_alt(html: &str) -> usize {
+    let html = clip_html(html);
+    let mut count = 0;
+    let mut search_from = 0;
+    while let Some(abs) = find_open_tag(html, search_from, "img", true) {
+        let Some(end) = find_tag_end(html, abs) else { break };
+        if let Some(tag) = safe_slice(html, abs, end.saturating_add(1)) {
+            if attr_value(tag, "alt").is_none_or(|v| v.trim().is_empty()) { count += 1; }
+        }
+        search_from = clamp_boundary(html, end.saturating_add(1));
+    }
+    count
 }
 
 pub(crate) fn robots_flags(content: Option<&str>) -> (bool, bool) {
@@ -1084,5 +1130,26 @@ mod tests {
             r.canonical_url.as_deref(),
             Some("https://example.com/a?b=1&c=2")
         );
+    }
+
+    #[test]
+    fn extracts_viewport_lang_and_image_alt() {
+        let html = r#"<html data-x="中文" lang="zh-CN"><head>
+            <meta content="width=device-width" name="viewport">
+            </head><body><img src="a"><img alt="   " src="b"><img alt="图像" src="c"></body></html>"#;
+        let r = inspect_html(html);
+        assert!(r.has_viewport);
+        assert_eq!(r.html_lang.as_deref(), Some("zh-CN"));
+        assert_eq!(r.images_missing_alt, 2);
+    }
+
+    #[test]
+    fn missing_basics_and_malformed_unicode_do_not_panic() {
+        let html = "<html><body>中文<img src='x'><img alt='' src='y'>";
+        let r = inspect_html(html);
+        assert!(!r.has_viewport);
+        assert_eq!(r.html_lang, None);
+        assert_eq!(r.images_missing_alt, 2);
+        assert!(!extract_viewport("<meta name='viewport'"));
     }
 }

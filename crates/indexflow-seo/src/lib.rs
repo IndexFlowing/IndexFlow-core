@@ -19,7 +19,7 @@ pub mod probe;
 
 pub use canonical::{canonical_matches_page, normalize_url};
 pub use evaluator::evaluate_html;
-pub use extractor::{decode_basic_entities, inspect_html};
+pub use extractor::{count_images_missing_alt, decode_basic_entities, extract_html_lang, extract_viewport, inspect_html};
 pub use models::*;
 
 #[cfg(feature = "probe")]
@@ -33,6 +33,7 @@ mod tests {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Rust Monolith Guide &amp; SEO Best Practices</title>
       <meta name="description" content="A complete technical SEO guide for modern Rust developers." />
       <meta name="robots" content="index, follow" />
@@ -113,6 +114,9 @@ mod tests {
             res.schema_types(),
             vec!["Article".to_string(), "FAQPage".to_string()]
         );
+        assert!(res.has_viewport);
+        assert_eq!(res.html_lang.as_deref(), Some("en"));
+        assert!(res.warnings.iter().any(|w| w.contains("AI 爬虫")));
     }
 
     #[test]

@@ -20,7 +20,9 @@
                 <span class="text-slate-700">|</span>
                 <span>正常通过: <b class="text-emerald-400">{{ stats.seo_passed }}</b></span>
                 <span class="text-slate-700">|</span>
-                <span>质量拦截: <b class="text-rose-400">{{ stats.seo_issues }}</b></span>
+                 <span>质量拦截: <b class="text-rose-400">{{ stats.seo_issues }}</b></span>
+                 <span class="text-slate-700">|</span>
+                 <span>存在警告: <b class="text-amber-400">{{ stats.seo_warnings }}</b></span>
                 <span class="text-slate-700">|</span>
                 <span>健康度: <b class="text-white">{{ stats.seo_health_score() }} 分</b></span>
             </div>
@@ -92,6 +94,13 @@
                    class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("PENDING") %}bg-slate-800 text-slate-200 font-semibold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
                     <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
                     待质检 <span class="font-mono text-[11px]">{{ stats.pending_seo_audit() }}</span>
+                </a>
+
+                <!-- 存在警告 -->
+                <a href="?site_id={{ current_site_id }}&status=WARN"
+                   class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("WARN") %}bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold{% else %}text-slate-400 hover:text-amber-400{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    存在警告 <span class="font-mono text-[11px]">{{ stats.seo_warnings }}</span>
                 </a>
             </div>
 
@@ -176,6 +185,10 @@
                             {% else if url.is_seo_fail() %}
                             <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
                                 <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>质量拦截
+                            </span>
+                            {% else if url.is_seo_warn() %}
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>存在警告
                             </span>
                             {% else %}
                             <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50">

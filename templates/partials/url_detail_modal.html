@@ -139,6 +139,18 @@
                             </tr>
                         </tbody>
                     </table>
+                    <div class="border-t border-slate-800/80">
+                        <table class="w-full text-left text-xs divide-y divide-slate-800/50"><tbody class="divide-y divide-slate-800/40">
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400 w-36">响应耗时</td><td colspan="2" class="px-4 py-3 font-mono">{{ url.response_time_ms.unwrap_or(0) }} ms</td></tr>
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400">页面体积</td><td colspan="2" class="px-4 py-3 font-mono">{{ url.payload_bytes.unwrap_or(0) }} 字节 ({{ url.payload_bytes.unwrap_or(0) / 1024 }} KB)</td></tr>
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400">H1 数量</td><td colspan="2" class="px-4 py-3 font-mono">{{ url.h1_count.unwrap_or(0) }}</td></tr>
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400">viewport / html lang</td><td colspan="2" class="px-4 py-3 font-mono">{% if url.has_viewport %}有{% else %}无{% endif %} / {{ url.html_lang.as_deref().unwrap_or("未声明") }}</td></tr>
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400">AI 爬虫屏蔽</td><td colspan="2" class="px-4 py-3 {% if url.ai_blocked_bots.is_some() %}text-amber-300{% else %}text-slate-300{% endif %}">{{ url.ai_blocked_bots.as_deref().unwrap_or("无") }}</td></tr>
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400">社交 / 结构化数据</td><td colspan="2" class="px-4 py-3">{% if url.has_opengraph %}OpenGraph{% else %}无 OpenGraph{% endif %} / {% if url.has_twitter_card %}Twitter Card{% else %}无 Twitter Card{% endif %} / {{ url.schema_types.as_deref().unwrap_or("无结构化数据") }}</td></tr>
+                            <tr><td class="px-4 py-3 font-semibold text-slate-400">图片 alt</td><td colspan="2" class="px-4 py-3">{{ url.images_missing_alt.unwrap_or(0) }} 张缺失</td></tr>
+                        </tbody></table>
+                        {% if !url.seo_warnings_list().is_empty() %}<div class="border-t border-amber-500/20 bg-amber-500/5 px-4 py-3"><div class="mb-2 text-xs font-semibold text-amber-300">软性优化建议</div><ul class="list-disc space-y-1 pl-5 text-xs text-amber-200">{% for warning in url.seo_warnings_list() %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
+                    </div>
                 </div>
 
             </div>

@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 impl UrlRepo {
     /// 持久化技术 SEO 门禁扫描结果
     pub async fn persist_seo_scan(&self, id: i64, gate: &QualityGateResult) -> anyhow::Result<()> {
-        let status = if gate.passed { "PASS" } else { "FAIL" };
+        let status = if !gate.passed { "FAIL" } else if gate.warnings.is_empty() { "PASS" } else { "WARN" };
         sqlx::query(
             r#"
             UPDATE urls
@@ -18,8 +18,20 @@ impl UrlRepo {
                 h1_content = $5,
                 seo_status = $6,
                 seo_issue = $7,
+                h1_count = $8,
+                has_nofollow = $9,
+                ai_blocked_bots = $10,
+                has_opengraph = $11,
+                has_twitter_card = $12,
+                schema_types = $13,
+                response_time_ms = $14,
+                payload_bytes = $15,
+                has_viewport = $16,
+                html_lang = $17,
+                images_missing_alt = $18,
+                seo_warnings = $19,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8
+            WHERE id = $20
             "#,
         )
         .bind(gate.http_status)
@@ -29,6 +41,18 @@ impl UrlRepo {
         .bind(gate.h1_content.as_deref())
         .bind(status)
         .bind(gate.block_reason.as_deref())
+        .bind(i64::try_from(gate.h1_count).unwrap_or(i64::MAX))
+        .bind(gate.has_nofollow)
+        .bind({ let names = gate.ai_directives.blocked_names(); (!names.is_empty()).then(|| names.join(",")) })
+        .bind(gate.opengraph.title.is_some() || gate.opengraph.description.is_some() || gate.opengraph.image.is_some() || gate.opengraph.og_type.is_some() || gate.opengraph.url.is_some() || gate.opengraph.site_name.is_some())
+        .bind(gate.twitter_card.card.is_some())
+        .bind({ let types = gate.schema_types(); (!types.is_empty()).then(|| types.join(",")) })
+        .bind(gate.response_time_ms)
+        .bind(gate.payload_bytes)
+        .bind(gate.has_viewport)
+        .bind(gate.html_lang.as_deref())
+        .bind(i64::try_from(gate.images_missing_alt).unwrap_or(i64::MAX))
+        .bind((!gate.warnings.is_empty()).then(|| gate.warnings.join("\n")))
         .bind(id)
         .execute(&self.pool)
         .await?;
