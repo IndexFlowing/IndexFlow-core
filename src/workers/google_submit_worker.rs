@@ -4,6 +4,7 @@ use crate::domain::{PipelineStage, ProviderKind};
 use crate::infrastructure::{SiteRepo, SubmissionLogRepo, UrlRepo};
 use chrono::{Duration as ChronoDuration, Utc};
 use std::sync::Arc;
+use std::collections::HashSet;
 use std::time::Duration;
 use tracing::{error, info};
 
@@ -64,9 +65,14 @@ impl GoogleSubmitWorker {
             return Ok(());
         }
 
+        let mut exhausted_sites: HashSet<i64> = Default::default();
         for url in pending {
             if !self.pipeline.is_running(PipelineStage::PushSubmit) {
                 break;
+            }
+
+            if exhausted_sites.contains(&url.site_id) {
+                continue;
             }
 
             if let Ok(Some(site)) = self.sites.find_by_id(url.site_id).await {
@@ -74,11 +80,12 @@ impl GoogleSubmitWorker {
                     continue;
                 }
 
-                let quota = self.logs.google_quota_window(site.google_daily_quota as u32).await?;
+                let quota = self.logs.google_quota_window(site.id, site.google_daily_quota as u32).await?;
                 if quota.exhausted() {
                     let until = quota.next_free_at.unwrap_or_else(|| Utc::now() + ChronoDuration::hours(24));
                     let _ = self.sites.set_google_quota_paused_until(site.id, until).await;
-                    return Ok(());
+                    exhausted_sites.insert(site.id);
+                    continue;
                 }
 
                 match self.submission.submit_url_google(&site, &url.url).await {

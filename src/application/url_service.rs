@@ -3,6 +3,7 @@ use crate::domain::{ProviderKind, Url};
 use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
 use serde::Serialize;
 use std::sync::Arc;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -320,5 +321,54 @@ impl UrlService {
             _ => {}
         }
         Ok(false)
+    }
+
+    pub async fn submit_bing_batch(&self, ids: &[i64]) -> anyhow::Result<usize> {
+        let urls = self.urls.find_by_ids(ids).await?;
+        let mut by_site: HashMap<i64, Vec<Url>> = HashMap::new();
+        for url in urls {
+            by_site.entry(url.site_id).or_default().push(url);
+        }
+
+        let mut success_count = 0;
+        for (site_id, site_urls) in by_site {
+            let Some(site) = self.sites.find_by_id(site_id).await? else { continue };
+            if !site.bing_ready() {
+                continue;
+            }
+            let key = site.bing_indexnow_key.as_deref().unwrap_or("");
+            let url_list = site_urls.iter().map(|url| url.url.clone()).collect::<Vec<_>>();
+            let results = self.submission_svc.submit_url_batch_bing(&site.domain, key, &url_list).await?;
+            for (url, result) in site_urls.iter().zip(results) {
+                self.submissions.insert(url.id, ProviderKind::Bing, result.is_success, result.status_code.map(|c| c as i32), result.response_msg.as_deref()).await?;
+                let status = if result.is_success { "SUBMITTED" } else { "FAILED" };
+                self.urls.apply_submit_outcome(url.id, Some(status), result.response_msg.as_deref(), None, None).await?;
+                success_count += usize::from(result.is_success);
+            }
+        }
+        Ok(success_count)
+    }
+
+    pub async fn submit_google_batch(&self, ids: &[i64]) -> anyhow::Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let semaphore = Arc::new(Semaphore::new(3));
+        let mut set = JoinSet::new();
+        for &id in ids {
+            let sem = semaphore.clone();
+            let service = self.clone();
+            set.spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+                service.submit_now(id, "google").await.unwrap_or(false)
+            });
+        }
+        let mut success_count = 0;
+        while let Some(result) = set.join_next().await {
+            if result.unwrap_or(false) {
+                success_count += 1;
+            }
+        }
+        Ok(success_count)
     }
 }

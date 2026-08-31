@@ -37,20 +37,53 @@ impl SubmissionLogRepo {
         Ok(row)
     }
 
-    pub async fn google_quota_window(&self, total: u32) -> anyhow::Result<GoogleQuotaWindow> {
+    pub async fn google_quota_window(&self, site_id: i64, total: u32) -> anyhow::Result<GoogleQuotaWindow> {
         let row: (i64, Option<DateTime<Utc>>) = sqlx::query_as(
             r#"
-            SELECT COUNT(*), MIN(created_at)
-            FROM submission_logs
-            WHERE provider = 'google'
-              AND success = 1
-              AND created_at > datetime('now', '-24 hours')
+            SELECT COUNT(*), MIN(sl.created_at)
+            FROM submission_logs sl
+            JOIN urls u ON u.id = sl.url_id
+            WHERE sl.provider = 'google'
+              AND sl.success = 1
+              AND u.site_id = $1
+              AND sl.created_at > datetime('now', '-24 hours')
             "#,
         )
+        .bind(site_id)
         .fetch_one(&self.pool)
         .await?;
 
         Ok(GoogleQuotaWindow::new(row.0, total, row.1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SubmissionLogRepo;
+    use crate::domain::ProviderKind;
+    use sqlx::SqlitePool;
+
+    #[tokio::test]
+    async fn google_quota_is_isolated_by_site() -> anyhow::Result<()> {
+        let pool = SqlitePool::connect("sqlite::memory:").await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        sqlx::query("INSERT INTO sites (domain) VALUES ('one.example'), ('two.example')")
+            .execute(&pool)
+            .await?;
+        sqlx::query("INSERT INTO urls (site_id, url, url_hash) VALUES (1, 'https://one.example/a', 'one-a'), (2, 'https://two.example/a', 'two-a')")
+            .execute(&pool)
+            .await?;
+
+        let repo = SubmissionLogRepo::new(pool);
+        repo.insert(1, ProviderKind::Google, true, Some(200), None).await?;
+
+        let site_one = repo.google_quota_window(1, 1).await?;
+        let site_two = repo.google_quota_window(2, 1).await?;
+        assert_eq!(site_one.used, 1);
+        assert!(site_one.exhausted());
+        assert_eq!(site_two.used, 0);
+        assert!(!site_two.exhausted());
+        Ok(())
     }
 }
 

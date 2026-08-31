@@ -131,6 +131,7 @@
                         <th class="px-4 py-3 font-medium w-40">Bing IndexNow</th>
                         <th class="px-4 py-3 font-medium w-40">Google API</th>
                         <th class="px-4 py-3 font-medium w-36">Bing 提交时间</th>
+                        <th class="px-4 py-3 font-medium w-36">Google 提交时间</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800/40">
@@ -181,6 +182,9 @@
                         <!-- Bing 提交时间 -->
                         <td class="px-4 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
                             {% if let Some(t) = url.bing_submitted_at %}{{ t }}{% else %}-{% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                            {% if let Some(t) = url.google_submitted_at %}{{ t }}{% else %}-{% endif %}
                         </td>
                     </tr>
                     {% endfor %}

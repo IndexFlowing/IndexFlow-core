@@ -35,7 +35,7 @@ impl UrlRepo {
                 COUNT(CASE WHEN seo_status = 'PASS' THEN 1 END) AS seo_passed,
                 COUNT(CASE WHEN seo_status IN ('WARN', 'FAIL') THEN 1 END) AS seo_issues,
                 COUNT(CASE WHEN seo_status = 'WARN' THEN 1 END) AS seo_warnings,
-                COUNT(CASE WHEN (bing_status = 'NONE' OR google_status = 'NONE') AND seo_status != 'FAIL' THEN 1 END) AS pending_submit,
+                COUNT(CASE WHEN ((bing_status = 'NONE' AND bing_index_status != 'INDEXED') OR (google_status = 'NONE' AND gsc_index_status != 'INDEXED')) AND seo_status != 'FAIL' THEN 1 END) AS pending_submit,
                 COUNT(CASE WHEN datetime(gsc_inspected_at) > datetime('now', '-24 hours') THEN 1 END) AS gsc_used_24h,
                 MAX(last_checked_at) AS last_seo_scan_at
             FROM urls
@@ -143,6 +143,19 @@ impl UrlRepo {
             .fetch_optional(&self.pool)
             .await?;
         Ok(url)
+    }
+
+    pub async fn find_by_ids(&self, ids: &[i64]) -> anyhow::Result<Vec<Url>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = (1..=ids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        let statement = format!("SELECT * FROM urls WHERE id IN ({placeholders})");
+        let mut query = sqlx::query_as::<_, Url>(&statement);
+        for id in ids {
+            query = query.bind(id);
+        }
+        Ok(query.fetch_all(&self.pool).await?)
     }
 }
 

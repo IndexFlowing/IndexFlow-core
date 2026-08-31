@@ -205,17 +205,11 @@ pub async fn action_batch_submit(
         provider = %form.provider,
         "🚀 [URL] 批量推送"
     );
-    let mut success_count = 0;
-    for id in &form.selected_ids {
-        if state
-            .url_service
-            .submit_now(*id, &form.provider)
-            .await
-            .unwrap_or(false)
-        {
-            success_count += 1;
-        }
-    }
+    let success_count = match form.provider.trim().to_ascii_lowercase().as_str() {
+        "bing" => state.url_service.submit_bing_batch(&form.selected_ids).await.unwrap_or(0),
+        "google" => state.url_service.submit_google_batch(&form.selected_ids).await.unwrap_or(0),
+        _ => 0,
+    };
     (
         StatusCode::OK,
         Json(serde_json::json!({
