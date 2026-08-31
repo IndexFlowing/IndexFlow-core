@@ -44,6 +44,8 @@ Thumbs.db
 # ===============================================
 *.log
 *.sqlite
+indexflow.db-shm
+indexflow.db-wal
 *.db
 generate-code-xml.cmd
 IndexFlow-core.xml
