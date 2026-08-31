@@ -84,6 +84,9 @@ pub async fn render_indexing(
         )
         .await
         .unwrap_or_default();
+    state
+        .view_boost
+        .record(current_site_id, items.iter().map(|url| url.id).collect());
 
     HtmlTemplate(
         IndexingTemplate {

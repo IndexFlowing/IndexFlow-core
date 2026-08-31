@@ -1,7 +1,7 @@
 use crate::application::{BingService, PipelineManager};
 use crate::config::AppConfig;
 use crate::domain::PipelineStage;
-use crate::infrastructure::{SiteRepo, UrlRepo};
+use crate::infrastructure::{SiteRepo, UrlRepo, ViewBoostRegistry};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -15,6 +15,7 @@ pub struct BingInspectWorker {
     bing_svc: BingService,
     pipeline: PipelineManager,
     config: AppConfig,
+    view_boost: ViewBoostRegistry,
 }
 
 impl BingInspectWorker {
@@ -24,6 +25,7 @@ impl BingInspectWorker {
         bing_svc: BingService,
         pipeline: PipelineManager,
         config: AppConfig,
+        view_boost: ViewBoostRegistry,
     ) -> Self {
         Self {
             urls,
@@ -31,6 +33,7 @@ impl BingInspectWorker {
             bing_svc,
             pipeline,
             config,
+            view_boost,
         }
     }
 
@@ -52,7 +55,8 @@ impl BingInspectWorker {
             return Ok(());
         }
 
-        let pending = self.urls.fetch_pending_bing_inspect(30).await?;
+        let boosted = self.view_boost.current_ids(Duration::from_secs(30));
+        let pending = self.urls.fetch_pending_bing_inspect(30, &boosted).await?;
         if pending.is_empty() {
             self.pipeline.stop(PipelineStage::BingInspect);
             info!("🎉 Bing 官方增量收录检测队列已全部处理完毕，Worker 回到待机");

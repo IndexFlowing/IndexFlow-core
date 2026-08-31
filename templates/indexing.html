@@ -65,7 +65,30 @@
         </div>
     </div>
 
-    <!-- 2. 运行状态动态感知横幅 -->
+    <!-- 2. 双引擎收录统计 -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        <div class="rounded-2xl bg-slate-900/50 border border-emerald-500/20 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-emerald-400 font-semibold mb-2">Google 收录统计</div>
+            <div class="flex flex-wrap gap-1.5 text-[11px]">
+                <a href="?site_id={{ current_site_id }}&gsc_status=INDEXED" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20">已编入索引 <b>{{ stats.google_indexed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&gsc_status=CRAWLED_NOT_INDEXED" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 text-amber-300 hover:bg-amber-500/20">抓取未编入 <b>{{ stats.google_crawled_not_indexed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&gsc_status=DISCOVERED_NOT_INDEXED" class="px-2.5 py-1.5 rounded-xl bg-sky-500/10 text-sky-300 hover:bg-sky-500/20">发现待抓取 <b>{{ stats.google_discovered_not_indexed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&gsc_status=NOT_INDEXED" class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 text-rose-300 hover:bg-rose-500/20">未收录 <b>{{ stats.google_not_indexed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&gsc_status=UNKNOWN" class="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700">待检测 <b>{{ stats.google_uninspected }}</b></a>
+            </div>
+        </div>
+        <div class="rounded-2xl bg-slate-900/50 border border-sky-500/20 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-sky-400 font-semibold mb-2">Bing 收录统计</div>
+            <div class="flex flex-wrap gap-1.5 text-[11px]">
+                <a href="?site_id={{ current_site_id }}&bing_status=INDEXED" class="px-2.5 py-1.5 rounded-xl bg-sky-500/10 text-sky-300 hover:bg-sky-500/20">已收录 <b>{{ stats.bing_indexed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&bing_status=NOT_INDEXED" class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 text-rose-300 hover:bg-rose-500/20">未收录 <b>{{ stats.bing_not_indexed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&bing_status=FAILED" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 text-amber-300 hover:bg-amber-500/20">检测异常 <b>{{ stats.bing_failed }}</b></a>
+                <a href="?site_id={{ current_site_id }}&bing_status=UNKNOWN" class="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700">待检测 <b>{{ stats.bing_uninspected }}</b></a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 运行状态动态感知横幅 -->
     {% if is_bing_running || is_gsc_running %}
     <div class="bg-gradient-to-r from-sky-950/60 via-slate-900 to-indigo-950/60 border border-sky-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-sky-200 animate-pulse shadow-lg">
         <div class="flex items-center gap-3">
@@ -82,7 +105,7 @@
     </div>
     {% endif %}
 
-    <!-- 3. 表格与工具栏一体化容器 -->
+    <!-- 4. 表格与工具栏一体化容器 -->
     <div id="indexing-table-container"
          class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl"
          hx-get="/indexing?site_id={{ current_site_id }}&gsc_status={{ gsc_status.as_deref().unwrap_or("") }}&bing_status={{ bing_status.as_deref().unwrap_or("") }}&orphan={% if orphan_only %}1{% endif %}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}"

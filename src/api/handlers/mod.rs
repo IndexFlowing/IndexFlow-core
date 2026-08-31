@@ -9,7 +9,7 @@ pub mod submit;
 pub mod url_detail;
 
 use crate::application::{SiteService, UrlService};
-use crate::infrastructure::AdminRepo;
+use crate::infrastructure::{AdminRepo, ViewBoostRegistry};
 use askama::Template;
 use axum::{
     http::{
@@ -30,6 +30,7 @@ pub struct AppState {
     pub admin_repo: Arc<AdminRepo>,
     pub jwt_secret: String,
     pub dry_run: bool,
+    pub view_boost: ViewBoostRegistry,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

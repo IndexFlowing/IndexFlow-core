@@ -1,7 +1,7 @@
 use crate::application::{GscService, PipelineManager};
 use crate::config::AppConfig;
 use crate::domain::PipelineStage;
-use crate::infrastructure::{SiteRepo, UrlRepo};
+use crate::infrastructure::{SiteRepo, UrlRepo, ViewBoostRegistry};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -15,6 +15,7 @@ pub struct GscInspectWorker {
     gsc: GscService,
     pipeline: PipelineManager,
     config: AppConfig,
+    view_boost: ViewBoostRegistry,
 }
 
 impl GscInspectWorker {
@@ -24,6 +25,7 @@ impl GscInspectWorker {
         gsc: GscService,
         pipeline: PipelineManager,
         config: AppConfig,
+        view_boost: ViewBoostRegistry,
     ) -> Self {
         Self {
             urls,
@@ -31,6 +33,7 @@ impl GscInspectWorker {
             gsc,
             pipeline,
             config,
+            view_boost,
         }
     }
 
@@ -52,14 +55,18 @@ impl GscInspectWorker {
             return Ok(());
         }
 
-        let pending = self.urls.fetch_pending_gsc(50).await?;
+        let boosted = self.view_boost.current_ids(Duration::from_secs(30));
+        let pending = self.urls.fetch_pending_gsc(50, &boosted).await?;
         if pending.is_empty() {
             self.pipeline.stop(PipelineStage::GscInspect);
             info!("🎉 GSC 增量检测队列已全部处理完毕，Worker 回到待机");
             return Ok(());
         }
 
-        info!(count = pending.len(), "📊 [GSC Worker] 正在以安全平滑速率 (3 并发) 向 Google 查询真实收录状态...");
+        info!(
+            count = pending.len(),
+            "📊 [GSC Worker] 正在以安全平滑速率 (3 并发) 向 Google 查询真实收录状态..."
+        );
 
         let semaphore = Arc::new(Semaphore::new(3));
         let mut set = JoinSet::new();

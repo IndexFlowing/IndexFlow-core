@@ -7,7 +7,8 @@ impl UrlRepo {
         let row: (
              i64,
              i64,
-            i64,
+             i64,
+             i64,
             i64,
             i64,
             i64,
@@ -31,7 +32,8 @@ impl UrlRepo {
                 COUNT(CASE WHEN gsc_index_status = 'UNKNOWN' THEN 1 END) AS google_uninspected,
                 COUNT(CASE WHEN bing_index_status = 'INDEXED' THEN 1 END) AS bing_indexed,
                 COUNT(CASE WHEN bing_index_status = 'NOT_INDEXED' THEN 1 END) AS bing_not_indexed,
-                COUNT(CASE WHEN bing_index_status IN ('UNKNOWN', 'FAILED') THEN 1 END) AS bing_uninspected,
+                COUNT(CASE WHEN bing_index_status = 'FAILED' THEN 1 END) AS bing_failed,
+                COUNT(CASE WHEN bing_index_status = 'UNKNOWN' THEN 1 END) AS bing_uninspected,
                 COUNT(CASE WHEN seo_status = 'PASS' THEN 1 END) AS seo_passed,
                 COUNT(CASE WHEN seo_status IN ('WARN', 'FAIL') THEN 1 END) AS seo_issues,
                 COUNT(CASE WHEN seo_status = 'WARN' THEN 1 END) AS seo_warnings,
@@ -55,13 +57,14 @@ impl UrlRepo {
             google_uninspected: row.5,
             bing_indexed: row.6,
             bing_not_indexed: row.7,
-            bing_uninspected: row.8,
-            seo_passed: row.9,
-            seo_issues: row.10,
-            seo_warnings: row.11,
-            pending_submit: row.12,
-            gsc_used_24h: row.13,
-            last_seo_scan_at: row.14,
+            bing_failed: row.8,
+            bing_uninspected: row.9,
+            seo_passed: row.10,
+            seo_issues: row.11,
+            seo_warnings: row.12,
+            pending_submit: row.13,
+            gsc_used_24h: row.14,
+            last_seo_scan_at: row.15,
         })
     }
 
@@ -149,7 +152,10 @@ impl UrlRepo {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = (1..=ids.len()).map(|i| format!("${i}")).collect::<Vec<_>>().join(", ");
+        let placeholders = (1..=ids.len())
+            .map(|i| format!("${i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let statement = format!("SELECT * FROM urls WHERE id IN ({placeholders})");
         let mut query = sqlx::query_as::<_, Url>(&statement);
         for id in ids {

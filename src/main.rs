@@ -16,7 +16,7 @@ use crate::application::{
 use crate::config::AppConfig;
 use crate::infrastructure::{
     build_http_client, connect, migrate, AdminRepo, HealthCheckRepo, SiteRepo, SubmissionLogRepo,
-    UrlRepo,
+    UrlRepo, ViewBoostRegistry,
 };
 use crate::providers::{bing::BingProvider, google::GoogleProvider};
 use crate::workers::{
@@ -45,6 +45,7 @@ async fn main() -> anyhow::Result<()> {
 
     let http = build_http_client()?;
     let pipeline = PipelineManager::new();
+    let view_boost = ViewBoostRegistry::new();
 
     let site_repo = SiteRepo::new(pool.clone());
     let url_repo = UrlRepo::new(pool.clone());
@@ -63,11 +64,7 @@ async fn main() -> anyhow::Result<()> {
     let sitemap_service = SitemapService::new(http.clone());
     let health_service = HealthService::new(http.clone())?;
     let submission_service = SubmissionService::new(bing_provider.clone(), google_provider.clone());
-    let gsc_service = GscService::new(
-        google_provider.clone(),
-        site_repo.clone(),
-        url_repo.clone(),
-    );
+    let gsc_service = GscService::new(google_provider.clone(), site_repo.clone(), url_repo.clone());
     let bing_service = BingService::new(bing_provider.clone(), url_repo.clone());
 
     let url_service = Arc::new(UrlService::new(
@@ -105,6 +102,7 @@ async fn main() -> anyhow::Result<()> {
         gsc_service.clone(),
         pipeline.clone(),
         config.clone(),
+        view_boost.clone(),
     ))
     .start();
 
@@ -114,6 +112,7 @@ async fn main() -> anyhow::Result<()> {
         bing_service.clone(),
         pipeline.clone(),
         config.clone(),
+        view_boost.clone(),
     ))
     .start();
 
@@ -143,6 +142,7 @@ async fn main() -> anyhow::Result<()> {
         admin_repo,
         jwt_secret: config.jwt_secret.clone(),
         dry_run: config.dry_run,
+        view_boost,
     };
 
     let app = build_router(state);

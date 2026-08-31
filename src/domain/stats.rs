@@ -11,6 +11,7 @@ pub struct DashboardStats {
     pub google_uninspected: i64,
     pub bing_indexed: i64,
     pub bing_not_indexed: i64,
+    pub bing_failed: i64,
     pub bing_uninspected: i64,
     pub seo_passed: i64,
     pub seo_issues: i64,
