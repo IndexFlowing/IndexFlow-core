@@ -101,7 +101,7 @@ pub async fn render_pipeline_action(
     Path(stage): Path<PipelineStage>,
     Query(q): Query<QueryParams>,
 ) -> Response {
-    render_action(state, stage, q.site_id.unwrap_or(1)).await
+    with_refresh(render_action(state, stage, q.site_id.unwrap_or(1)).await)
 }
 
 pub async fn action_pipeline_start(
