@@ -1,7 +1,7 @@
 use crate::application::{HealthService, PipelineManager};
 use crate::config::AppConfig;
 use crate::domain::PipelineStage;
-use crate::infrastructure::{HealthCheckRepo, UrlRepo};
+use crate::infrastructure::{HealthCheckRepo, SiteRepo, UrlRepo};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -11,6 +11,7 @@ use tracing::{error, info};
 #[derive(Clone)]
 pub struct SeoAuditWorker {
     urls: UrlRepo,
+    sites: SiteRepo, // 核心新增
     health_repo: HealthCheckRepo,
     health: HealthService,
     pipeline: PipelineManager,
@@ -20,6 +21,7 @@ pub struct SeoAuditWorker {
 impl SeoAuditWorker {
     pub fn new(
         urls: UrlRepo,
+        sites: SiteRepo,
         health_repo: HealthCheckRepo,
         health: HealthService,
         pipeline: PipelineManager,
@@ -27,6 +29,7 @@ impl SeoAuditWorker {
     ) -> Self {
         Self {
             urls,
+            sites,
             health_repo,
             health,
             pipeline,
@@ -73,10 +76,18 @@ impl SeoAuditWorker {
             let health_svc = self.health.clone();
             let health_repo = self.health_repo.clone();
             let url_repo = self.urls.clone();
+            let sites = self.sites.clone();
 
             set.spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
-                let gate = health_svc.check_url(&url.url).await;
+
+                let custom_ua = if let Ok(Some(site)) = sites.find_by_id(url.site_id).await {
+                    site.effective_crawler_ua()
+                } else {
+                    None
+                };
+
+                let gate = health_svc.check_url(&url.url, custom_ua.as_deref()).await;
                 let _ = health_repo.insert_from_gate(url.id, &gate).await;
                 let _ = url_repo.persist_seo_scan(url.id, &gate).await;
                 (url.url, gate.passed)

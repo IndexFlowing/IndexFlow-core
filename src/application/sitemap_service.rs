@@ -2,28 +2,44 @@ use crate::domain::{
     extract_locale_and_path_prefix, SitemapType, SitemapUrlEntry,
 };
 use indexflow_sitemap::SitemapFetcher;
-use reqwest::Client;
+use std::time::Duration;
 use tracing::info;
 
 #[derive(Clone)]
 pub struct SitemapService {
-    fetcher: SitemapFetcher,
+    shared_client: reqwest::Client,
 }
 
 impl SitemapService {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: reqwest::Client) -> Self {
         Self {
-            fetcher: SitemapFetcher::new(client),
+            shared_client: client,
         }
     }
 
+    /// 解析 Sitemap：若站点有专属放行 UA，用定制 Client 发起抓取，否则使用共享 Client
     pub async fn expand_to_page_entries(
         &self,
         sitemap_url: &str,
         max_depth: u8,
+        custom_ua: Option<&str>,
     ) -> anyhow::Result<(SitemapType, Vec<SitemapUrlEntry>)> {
-        info!(url = %sitemap_url, "expanding sitemap entries");
-        let (is_index, raw_entries) = self.fetcher.expand_all(sitemap_url, max_depth).await?;
+        info!(url = %sitemap_url, ua = ?custom_ua, "expanding sitemap entries");
+
+        let client = if let Some(ua) = custom_ua.map(str::trim).filter(|s| !s.is_empty()) {
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(15))
+                .timeout(Duration::from_secs(60))
+                .user_agent(ua)
+                .redirect(reqwest::redirect::Policy::limited(5))
+                .build()
+                .unwrap_or_else(|_| self.shared_client.clone())
+        } else {
+            self.shared_client.clone()
+        };
+
+        let fetcher = SitemapFetcher::new(client);
+        let (is_index, raw_entries) = fetcher.expand_all(sitemap_url, max_depth).await?;
 
         let sm_type = if is_index {
             SitemapType::Index

@@ -29,6 +29,7 @@ pub struct SettingsForm {
     pub bing_indexnow_key: Option<String>,
     pub bing_webmaster_api_key: Option<String>,
     pub google_service_account_json: Option<String>,
+    pub custom_user_agent: Option<String>, // 核心新增
 }
 
 #[derive(Deserialize)]
@@ -176,6 +177,9 @@ pub async fn handle_save_settings(
                 .as_deref()
                 .filter(|s| !s.trim().is_empty()),
             form.google_service_account_json
+                .as_deref()
+                .filter(|s| !s.trim().is_empty()),
+            form.custom_user_agent
                 .as_deref()
                 .filter(|s| !s.trim().is_empty()),
         )

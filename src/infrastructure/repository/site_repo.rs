@@ -1,3 +1,4 @@
+use crate::infrastructure::INTERNAL_CRAWLER_UA;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
@@ -8,17 +9,34 @@ pub struct Site {
     pub domain: String,
     pub sitemap_url: Option<String>,
     pub bing_indexnow_key: Option<String>,
-    pub bing_webmaster_api_key: Option<String>, // 核心字段
+    pub bing_webmaster_api_key: Option<String>,
     pub google_service_account_json: Option<String>,
     pub gsc_property_url: Option<String>,
     pub gsc_daily_quota: i64,
     pub google_daily_quota: i64,
     pub google_quota_paused_until: Option<DateTime<Utc>>,
+    pub custom_user_agent: Option<String>, // 核心新增：Cloudflare 放行密钥 / 自定义 UA
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 impl Site {
+    /// 智能计算发往该站点的真实爬虫 User-Agent
+    /// 若站长只填了密钥 (如 "Secret888")，自动拼接在标准 IndexFlowBot 之后，确保完美命中 Cloudflare contains 规则
+    pub fn effective_crawler_ua(&self) -> Option<String> {
+        self.custom_user_agent
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|token| {
+                if token.starts_with("Mozilla/") {
+                    token.to_string()
+                } else {
+                    format!("{INTERNAL_CRAWLER_UA}; {token}")
+                }
+            })
+    }
+
     pub fn has_bing_credentials(&self) -> bool {
         self.bing_indexnow_key
             .as_ref()
@@ -95,6 +113,7 @@ impl SiteRepo {
         bing_indexnow_key: Option<&str>,
         bing_webmaster_api_key: Option<&str>,
         google_service_account_json: Option<&str>,
+        custom_user_agent: Option<&str>,
     ) -> anyhow::Result<Site> {
         let site = if let Some(site_id) = id {
             sqlx::query_as::<_, Site>(
@@ -106,8 +125,9 @@ impl SiteRepo {
                     bing_indexnow_key = $3,
                     bing_webmaster_api_key = $4,
                     google_service_account_json = $5,
+                    custom_user_agent = $6,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = $6
+                WHERE id = $7
                 RETURNING *
                 "#,
             )
@@ -116,6 +136,7 @@ impl SiteRepo {
             .bind(bing_indexnow_key)
             .bind(bing_webmaster_api_key)
             .bind(google_service_account_json)
+            .bind(custom_user_agent)
             .bind(site_id)
             .fetch_one(&self.pool)
             .await?
@@ -123,9 +144,9 @@ impl SiteRepo {
             sqlx::query_as::<_, Site>(
                 r#"
                 INSERT INTO sites (
-                    domain, sitemap_url, bing_indexnow_key, bing_webmaster_api_key, google_service_account_json, updated_at
+                    domain, sitemap_url, bing_indexnow_key, bing_webmaster_api_key, google_service_account_json, custom_user_agent, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
                 RETURNING *
                 "#,
             )
@@ -134,6 +155,7 @@ impl SiteRepo {
             .bind(bing_indexnow_key)
             .bind(bing_webmaster_api_key)
             .bind(google_service_account_json)
+            .bind(custom_user_agent)
             .fetch_one(&self.pool)
             .await?
         };

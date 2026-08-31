@@ -89,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
 
     Arc::new(SeoAuditWorker::new(
         url_repo.clone(),
+        site_repo.clone(),
         health_repo.clone(),
         health_service,
         pipeline.clone(),

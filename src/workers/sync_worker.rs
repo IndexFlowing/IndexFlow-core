@@ -61,8 +61,10 @@ impl SyncWorker {
                 continue;
             };
 
-            info!(sitemap = %sm_url, domain = %site.domain, "🌐 [SyncWorker] 正在连接目标 Sitemap 并流式解析...");
-            let (_is_index, entries) = match self.sitemap_service.expand_to_page_entries(sm_url, 3).await {
+            let effective_ua = site.effective_crawler_ua();
+
+            info!(sitemap = %sm_url, domain = %site.domain, ua = ?effective_ua, "🌐 [SyncWorker] 正在连接目标 Sitemap 并流式解析...");
+            let (_is_index, entries) = match self.sitemap_service.expand_to_page_entries(sm_url, 3, effective_ua.as_deref()).await {
                 Ok(res) => res,
                 Err(e) => {
                     warn!(error = %e, "Sitemap fetch failed");

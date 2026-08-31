@@ -10,11 +10,11 @@
             <span>⚙️</span> 多站点与搜索引擎凭证管理
         </h2>
         <p class="text-xs text-slate-400">
-            管理你的多个网站资产，配置 Sitemap 路径、Bing IndexNow API Key、Bing Webmaster 深度检测 Key 以及 Google 官方授权凭据。
+            管理你的多个网站资产，配置 Sitemap 路径、Cloudflare WAF 爬虫放行密钥、Bing 密钥与 Google 官方授权凭据。
         </p>
     </div>
 
-    <!-- 已配置站点列表卡片 (全屏高密流式布局) -->
+    <!-- 已配置站点列表卡片 -->
     <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
         <div class="px-6 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/40">
             <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
@@ -41,6 +41,9 @@
                         {% if current_site_id == s.id %}
                         <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">当前控制台站点</span>
                         {% endif %}
+                        {% if s.custom_user_agent.is_some() %}
+                        <span class="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">CF 防火墙放行就绪</span>
+                        {% endif %}
                         {% if s.bing_ready() %}
                         <span class="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium">IndexNow 就绪</span>
                         {% endif %}
@@ -65,6 +68,7 @@
                             data-indexnow="{{ s.bing_indexnow_key.as_deref().unwrap_or("") }}"
                             data-webmaster="{{ s.bing_webmaster_api_key.as_deref().unwrap_or("") }}"
                             data-google="{{ s.google_service_account_json.as_deref().unwrap_or("") }}"
+                            data-ua="{{ s.custom_user_agent.as_deref().unwrap_or("") }}"
                             class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition text-xs border border-slate-700/60 cursor-pointer">
                         编辑凭证
                     </button>
@@ -82,7 +86,7 @@
     </div>
 </div>
 
-<!-- 站点编辑/新建 模态弹窗 (支持点击背景与 ESC 自动关闭) -->
+<!-- 站点编辑/新建 模态弹窗 -->
 <div id="site-modal" 
      class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto flex items-center justify-center"
      onclick="if(event.target === this) closeSiteModal()">
@@ -118,6 +122,19 @@
                                class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
                         <p class="text-[11px] text-slate-500 mt-1">支持 XML 索引树与 .xml.gz 格式</p>
                     </div>
+                </div>
+
+                <!-- 核心新增：Cloudflare 爬虫放行密钥 / 自定义 UA -->
+                <div>
+                    <label class="block font-semibold text-slate-300 flex items-center justify-between">
+                        <span>Cloudflare WAF 放行密钥 / 自定义 User-Agent</span>
+                        <span class="text-[11px] text-amber-400 font-mono font-normal">防 403 拦截</span>
+                    </label>
+                    <input id="site-ua" name="custom_user_agent" placeholder="例如: Your-SeoBot-Secret888" 
+                           class="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 font-mono text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+                    <p class="text-[11px] text-slate-500 mt-1">
+                        若站点开启了 Cloudflare 防火墙，填入 WAF 规则中约定的放行 Token。抓取时会自动附加到 User-Agent 头。
+                    </p>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -185,6 +202,7 @@ function openAddSiteModal() {
     document.getElementById('site-domain-submit').value = '';
     document.getElementById('domain-help').textContent = '主域名（无需输入 http://）';
     document.getElementById('site-sitemap').value = '';
+    document.getElementById('site-ua').value = '';
     document.getElementById('site-indexnow').value = '';
     document.getElementById('site-webmaster').value = '';
     document.getElementById('site-google').value = '';
@@ -204,6 +222,7 @@ function openEditSiteModal(button) {
     document.getElementById('site-domain-submit').value = button.dataset.domain;
     document.getElementById('domain-help').textContent = '站点创建后域名不可修改';
     document.getElementById('site-sitemap').value = button.dataset.sitemap || '';
+    document.getElementById('site-ua').value = button.dataset.ua || '';
     document.getElementById('site-indexnow').value = button.dataset.indexnow || '';
     document.getElementById('site-webmaster').value = button.dataset.webmaster || '';
     document.getElementById('site-google').value = button.dataset.google || '';
@@ -227,7 +246,7 @@ function clearTestResults() {
     });
 }
 
-// 保存成功的核心处理：关闭弹窗 -> 弹出 Toast -> 优雅平滑刷新页面
+// 保存成功的核心处理
 function handleSaveResponse(event) {
     const submitBtn = document.querySelector('#site-form [type=submit]');
     if (submitBtn) {
@@ -290,7 +309,7 @@ async function testCredential(kind, button) {
     }
 }
 
-// 表单提交前将 disabled 的域名同步到 hidden input
+// 表单提交前同步域名
 document.getElementById('site-form').addEventListener('submit', () => {
     document.getElementById('site-domain-submit').value = document.getElementById('site-domain').value;
 });

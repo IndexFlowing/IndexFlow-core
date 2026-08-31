@@ -2,8 +2,8 @@ use crate::application::{BingService, GscService, HealthService, SubmissionServi
 use crate::domain::{ProviderKind, Url};
 use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
 use serde::Serialize;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -18,7 +18,7 @@ pub struct UrlService {
     health_svc: HealthService,
     submission_svc: SubmissionService,
     gsc_svc: GscService,
-    bing_svc: BingService, // 核心新增
+    bing_svc: BingService,
 }
 
 #[derive(Debug, Serialize)]
@@ -109,7 +109,10 @@ impl UrlService {
         let Some(url) = self.urls.find_by_id(id).await? else {
             return Ok(None);
         };
-        let gate = self.health_svc.check_url(&url.url).await;
+        let site = self.sites.find_by_id(url.site_id).await?;
+        let custom_ua = site.as_ref().and_then(|s| s.effective_crawler_ua());
+
+        let gate = self.health_svc.check_url(&url.url, custom_ua.as_deref()).await;
         self.health.insert_from_gate(url.id, &gate).await?;
         self.urls.persist_seo_scan(url.id, &gate).await?;
         let updated = self.urls.find_by_id(id).await?.unwrap_or(url);
@@ -135,13 +138,17 @@ impl UrlService {
         for &id in ids {
             let sem = semaphore.clone();
             let urls_repo = self.urls.clone();
+            let sites_repo = self.sites.clone();
             let health_repo = self.health.clone();
             let health_svc = self.health_svc.clone();
 
             set.spawn(async move {
                 let _permit = sem.acquire().await.unwrap();
                 if let Ok(Some(url)) = urls_repo.find_by_id(id).await {
-                    let gate = health_svc.check_url(&url.url).await;
+                    let site = sites_repo.find_by_id(url.site_id).await.ok().flatten();
+                    let custom_ua = site.as_ref().and_then(|s| s.effective_crawler_ua());
+
+                    let gate = health_svc.check_url(&url.url, custom_ua.as_deref()).await;
                     let _ = health_repo.insert_from_gate(url.id, &gate).await;
                     let _ = urls_repo.persist_seo_scan(url.id, &gate).await;
                     return true;
@@ -171,7 +178,6 @@ impl UrlService {
         Ok(res.ok)
     }
 
-    /// 实时单条检测 Bing 收录状态
     pub async fn inspect_bing_now(&self, id: i64) -> anyhow::Result<bool> {
         let Some(url) = self.urls.find_by_id(id).await? else {
             return Ok(false);
@@ -184,7 +190,6 @@ impl UrlService {
         Ok(res.ok)
     }
 
-    /// 统一质检入口：`seo` | `google` | `bing`
     pub async fn inspect_now(&self, id: i64, engine: &str) -> anyhow::Result<bool> {
         match engine.trim().to_ascii_lowercase().as_str() {
             "seo" => Ok(self.recheck(id).await?.map(|r| r.passed).unwrap_or(false)),
@@ -194,7 +199,6 @@ impl UrlService {
         }
     }
 
-    /// 批量质检：`seo` | `google` | `bing`
     pub async fn batch_inspect(&self, ids: &[i64], engine: &str) -> anyhow::Result<usize> {
         let engine = engine.trim().to_ascii_lowercase();
         match engine.as_str() {

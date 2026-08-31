@@ -38,6 +38,7 @@ impl SiteService {
         bing_key: Option<&str>,
         bing_webmaster_key: Option<&str>,
         google_json: Option<&str>,
+        custom_user_agent: Option<&str>, // 核心新增
     ) -> anyhow::Result<Site> {
         self.sites
             .save_or_update(
@@ -47,6 +48,7 @@ impl SiteService {
                 bing_key,
                 bing_webmaster_key,
                 google_json,
+                custom_user_agent,
             )
             .await
     }
