@@ -38,17 +38,57 @@ pub struct Claims {
     pub exp: usize,
 }
 
+fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<String> = Option::deserialize(deserializer)?;
+    Ok(value.filter(|value| !value.is_empty()))
+}
+
 #[derive(Deserialize, Default)]
 pub struct QueryParams {
     pub site_id: Option<i64>,
     pub page: Option<i64>,
     pub limit: Option<i64>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub lang: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub q: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub status: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub gsc_status: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub bing_status: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub orphan: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::QueryParams;
+
+    #[test]
+    fn query_params_empty_string_is_none() {
+        let params: QueryParams = serde_urlencoded::from_str("q=").unwrap();
+
+        assert_eq!(params.q, None);
+    }
+
+    #[test]
+    fn query_params_non_empty_string_is_preserved() {
+        let params: QueryParams = serde_urlencoded::from_str("q=example").unwrap();
+
+        assert_eq!(params.q.as_deref(), Some("example"));
+    }
+
+    #[test]
+    fn query_params_missing_string_is_none() {
+        let params: QueryParams = serde_urlencoded::from_str("").unwrap();
+
+        assert_eq!(params.q, None);
+    }
 }
 
 pub struct HtmlTemplate<T>(pub T, pub Option<String>);

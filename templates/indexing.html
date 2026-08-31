@@ -205,6 +205,9 @@
                                     -
                                     {% endif %}
                                 </div>
+                                <div class="text-[11px] text-slate-500 font-mono mt-1">
+                                    {% if let Some(t) = url.gsc_inspected_at %}检索于 {{ t }}{% else %}尚未检测{% endif %}
+                                </div>
                             </td>
 
                             <!-- 3. Bing 官方状态卡槽 (状态药丸 + 爬取明细/时间) -->
@@ -234,6 +237,9 @@
                                     {% else %}
                                     -
                                     {% endif %}
+                                </div>
+                                <div class="text-[11px] text-slate-500 font-mono mt-1">
+                                    {% if let Some(t) = url.bing_inspected_at %}检索于 {{ t }}{% else %}尚未检测{% endif %}
                                 </div>
                             </td>
 

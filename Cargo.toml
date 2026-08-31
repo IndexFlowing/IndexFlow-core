@@ -30,6 +30,7 @@ sqlx = { version = "0.8", features = [
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
+serde_urlencoded = "0.7"
 serde_json = "1"
 
 # HTTP client
