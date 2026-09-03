@@ -1,5 +1,6 @@
 pub mod error;
 pub mod health_check;
+pub mod monitoring;
 pub mod pipeline;
 pub mod site;
 pub mod stats;
@@ -8,6 +9,7 @@ pub mod url;
 pub mod url_priority;
 
 pub use health_check::*;
+pub use monitoring::*;
 pub use pipeline::*;
 #[allow(unused_imports)]
 pub use site::*;

@@ -1,6 +1,8 @@
 use crate::application::{BingService, GscService, HealthService, SubmissionService};
-use crate::domain::{ProviderKind, Url};
-use crate::infrastructure::{HealthCheckRepo, SiteRepo, SubmissionLogRepo, UrlRepo};
+use crate::domain::{MonitoringTimeline, ProviderKind, TimelineEntry, Url};
+use crate::infrastructure::{
+    HealthCheckRepo, IndexHistoryRepo, SiteRepo, SubmissionLogRepo, UrlRepo,
+};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,6 +21,7 @@ pub struct UrlService {
     submission_svc: SubmissionService,
     gsc_svc: GscService,
     bing_svc: BingService,
+    history: IndexHistoryRepo,
 }
 
 #[derive(Debug, Serialize)]
@@ -38,6 +41,7 @@ impl UrlService {
         submission_svc: SubmissionService,
         gsc_svc: GscService,
         bing_svc: BingService,
+        history: IndexHistoryRepo,
     ) -> Self {
         Self {
             urls,
@@ -48,14 +52,25 @@ impl UrlService {
             submission_svc,
             gsc_svc,
             bing_svc,
+            history,
         }
     }
 
-    pub async fn test_google_credentials(&self, service_account_json: &str, domain: &str) -> anyhow::Result<String> {
-        self.gsc_svc.test_credentials(service_account_json, domain).await
+    pub async fn test_google_credentials(
+        &self,
+        service_account_json: &str,
+        domain: &str,
+    ) -> anyhow::Result<String> {
+        self.gsc_svc
+            .test_credentials(service_account_json, domain)
+            .await
     }
 
-    pub async fn test_bing_webmaster_key(&self, key: &str, domain: &str) -> anyhow::Result<Vec<String>> {
+    pub async fn test_bing_webmaster_key(
+        &self,
+        key: &str,
+        domain: &str,
+    ) -> anyhow::Result<Vec<String>> {
         self.bing_svc.test_webmaster_key(key, domain).await
     }
 
@@ -112,7 +127,10 @@ impl UrlService {
         let site = self.sites.find_by_id(url.site_id).await?;
         let custom_ua = site.as_ref().and_then(|s| s.effective_crawler_ua());
 
-        let gate = self.health_svc.check_url(&url.url, custom_ua.as_deref()).await;
+        let gate = self
+            .health_svc
+            .check_url(&url.url, custom_ua.as_deref())
+            .await;
         self.health.insert_from_gate(url.id, &gate).await?;
         self.urls.persist_seo_scan(url.id, &gate).await?;
         let updated = self.urls.find_by_id(id).await?.unwrap_or(url);
@@ -174,7 +192,9 @@ impl UrlService {
             return Ok(false);
         };
         let res = self.gsc_svc.inspect_one(&site, &url.url).await?;
-        self.gsc_svc.apply_inspect_result(url.id, &res).await?;
+        self.gsc_svc
+            .apply_inspect_result(url.id, &res, url.is_watched)
+            .await?;
         Ok(res.ok)
     }
 
@@ -186,7 +206,9 @@ impl UrlService {
             return Ok(false);
         };
         let res = self.bing_svc.inspect_one(&site, &url.url).await?;
-        self.bing_svc.apply_inspect_result(url.id, &res).await?;
+        self.bing_svc
+            .apply_inspect_result(url.id, &res, url.is_watched)
+            .await?;
         Ok(res.ok)
     }
 
@@ -197,6 +219,61 @@ impl UrlService {
             "bing" => self.inspect_bing_now(id).await,
             other => anyhow::bail!("unsupported inspect engine: {other}"),
         }
+    }
+
+    pub async fn toggle_watch(&self, id: i64, watched: bool) -> anyhow::Result<bool> {
+        if self.urls.find_by_id(id).await?.is_none() {
+            return Ok(false);
+        }
+        self.urls.set_watched(id, watched).await?;
+        Ok(true)
+    }
+
+    pub async fn list_watched(&self, site_id: i64) -> anyhow::Result<Vec<Url>> {
+        self.urls.fetch_watched(site_id).await
+    }
+
+    pub async fn batch_toggle_watch(&self, ids: &[i64], watched: bool) -> anyhow::Result<usize> {
+        let mut count = 0;
+        for id in ids {
+            if self.toggle_watch(*id, watched).await? {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    pub async fn timeline(&self, url_id: i64) -> anyhow::Result<Option<MonitoringTimeline>> {
+        let Some(url) = self.urls.find_by_id(url_id).await? else {
+            return Ok(None);
+        };
+        let mut entries = Vec::new();
+        if let Some(at) = url.sitemap_synced_at {
+            entries.push(TimelineEntry::Sitemap {
+                at,
+                lastmod: url.sitemap_lastmod,
+            });
+        }
+        for check in self.health.list_by_url(url_id).await? {
+            entries.push(TimelineEntry::SeoCheck {
+                at: check.checked_at,
+                check,
+            });
+        }
+        for log in self.submissions.list_by_url(url_id).await? {
+            entries.push(TimelineEntry::Submission {
+                at: log.created_at,
+                log,
+            });
+        }
+        for history in self.history.list_by_url(url_id).await? {
+            entries.push(TimelineEntry::IndexStatus {
+                at: history.checked_at,
+                history,
+            });
+        }
+        entries.sort_by_key(TimelineEntry::at);
+        Ok(Some(MonitoringTimeline { url, entries }))
     }
 
     pub async fn batch_inspect(&self, ids: &[i64], engine: &str) -> anyhow::Result<usize> {
@@ -336,17 +413,45 @@ impl UrlService {
 
         let mut success_count = 0;
         for (site_id, site_urls) in by_site {
-            let Some(site) = self.sites.find_by_id(site_id).await? else { continue };
+            let Some(site) = self.sites.find_by_id(site_id).await? else {
+                continue;
+            };
             if !site.bing_ready() {
                 continue;
             }
             let key = site.bing_indexnow_key.as_deref().unwrap_or("");
-            let url_list = site_urls.iter().map(|url| url.url.clone()).collect::<Vec<_>>();
-            let results = self.submission_svc.submit_url_batch_bing(&site.domain, key, &url_list).await?;
+            let url_list = site_urls
+                .iter()
+                .map(|url| url.url.clone())
+                .collect::<Vec<_>>();
+            let results = self
+                .submission_svc
+                .submit_url_batch_bing(&site.domain, key, &url_list)
+                .await?;
             for (url, result) in site_urls.iter().zip(results) {
-                self.submissions.insert(url.id, ProviderKind::Bing, result.is_success, result.status_code.map(|c| c as i32), result.response_msg.as_deref()).await?;
-                let status = if result.is_success { "SUBMITTED" } else { "FAILED" };
-                self.urls.apply_submit_outcome(url.id, Some(status), result.response_msg.as_deref(), None, None).await?;
+                self.submissions
+                    .insert(
+                        url.id,
+                        ProviderKind::Bing,
+                        result.is_success,
+                        result.status_code.map(|c| c as i32),
+                        result.response_msg.as_deref(),
+                    )
+                    .await?;
+                let status = if result.is_success {
+                    "SUBMITTED"
+                } else {
+                    "FAILED"
+                };
+                self.urls
+                    .apply_submit_outcome(
+                        url.id,
+                        Some(status),
+                        result.response_msg.as_deref(),
+                        None,
+                        None,
+                    )
+                    .await?;
                 success_count += usize::from(result.is_success);
             }
         }

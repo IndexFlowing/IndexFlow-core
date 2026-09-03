@@ -22,8 +22,19 @@ pub struct Translations {
     pub nav_dashboard: &'static str,
     pub nav_urls: &'static str,
     pub nav_settings: &'static str,
+    pub nav_monitoring: &'static str,
     pub footer_text: &'static str,
     pub dry_run_badge: &'static str,
+    pub monitoring_title: &'static str,
+    pub monitoring_watched: &'static str,
+    pub monitoring_candidates: &'static str,
+    pub monitoring_add: &'static str,
+    pub monitoring_remove: &'static str,
+    pub monitoring_empty: &'static str,
+    pub monitoring_sitemap: &'static str,
+    pub monitoring_seo: &'static str,
+    pub monitoring_submission: &'static str,
+    pub monitoring_index_status: &'static str,
 
     // 控制台 Dashboard
     pub unconfigured_site: &'static str,
@@ -85,8 +96,19 @@ pub const ZH: Translations = Translations {
     nav_dashboard: "控制台",
     nav_urls: "URL 列表",
     nav_settings: "站点设置",
+    nav_monitoring: "收录监测",
     footer_text: "IndexFlow · 开源搜索引擎收录与技术 SEO 基础设施",
     dry_run_badge: "Dry-Run 演练模式 (安全日志拦截)",
+    monitoring_title: "收录监测",
+    monitoring_watched: "监测中的 URL",
+    monitoring_candidates: "从已解析 URL 中添加",
+    monitoring_add: "加入监测",
+    monitoring_remove: "移出监测",
+    monitoring_empty: "暂无监测中的 URL",
+    monitoring_sitemap: "Sitemap",
+    monitoring_seo: "SEO 检测",
+    monitoring_submission: "提交记录",
+    monitoring_index_status: "收录状态变化",
 
     unconfigured_site: "未配置站点",
     unset: "未设置",
@@ -144,8 +166,19 @@ pub const EN: Translations = Translations {
     nav_dashboard: "Dashboard",
     nav_urls: "URLs",
     nav_settings: "Settings",
+    nav_monitoring: "Indexing Watch",
     footer_text: "IndexFlow · Open-Core Search Index & Technical SEO Infrastructure",
     dry_run_badge: "Dry-Run Mode (Safe Logs Only)",
+    monitoring_title: "Indexing Watch",
+    monitoring_watched: "Watched URLs",
+    monitoring_candidates: "Add from parsed URLs",
+    monitoring_add: "Add to watch",
+    monitoring_remove: "Remove from watch",
+    monitoring_empty: "No URLs are being watched",
+    monitoring_sitemap: "Sitemap",
+    monitoring_seo: "SEO check",
+    monitoring_submission: "Submission",
+    monitoring_index_status: "Index status change",
 
     unconfigured_site: "Unconfigured Site",
     unset: "Unset",
@@ -180,7 +213,8 @@ pub const EN: Translations = Translations {
     status_submitted: "Submitted",
 
     settings_title: "Site & Engine Credentials",
-    settings_desc: "Configure target domain, sitemap URL, and search engine API authorization keys.",
+    settings_desc:
+        "Configure target domain, sitemap URL, and search engine API authorization keys.",
     label_domain: "Domain Name",
     label_sitemap: "Sitemap URL",
     label_bing_key: "Bing IndexNow API Key",
@@ -206,13 +240,22 @@ pub fn get_translations(lang: Language) -> &'static Translations {
     }
 }
 
-pub fn detect_language(headers: &HeaderMap, query_lang: Option<&str>) -> (Language, Option<String>) {
+pub fn detect_language(
+    headers: &HeaderMap,
+    query_lang: Option<&str>,
+) -> (Language, Option<String>) {
     if let Some(ql) = query_lang {
         let l = ql.to_ascii_lowercase();
         if l.starts_with("en") {
-            return (Language::En, Some("if_lang=en; Path=/; Max-Age=31536000; SameSite=Lax".into()));
+            return (
+                Language::En,
+                Some("if_lang=en; Path=/; Max-Age=31536000; SameSite=Lax".into()),
+            );
         } else if l.starts_with("zh") {
-            return (Language::Zh, Some("if_lang=zh; Path=/; Max-Age=31536000; SameSite=Lax".into()));
+            return (
+                Language::Zh,
+                Some("if_lang=zh; Path=/; Max-Age=31536000; SameSite=Lax".into()),
+            );
         }
     }
 
@@ -221,15 +264,23 @@ pub fn detect_language(headers: &HeaderMap, query_lang: Option<&str>) -> (Langua
             let mut parts = cookie.trim().splitn(2, '=');
             if let (Some(k), Some(v)) = (parts.next(), parts.next()) {
                 if k == "if_lang" {
-                    if v.starts_with("en") { return (Language::En, None); }
-                    if v.starts_with("zh") { return (Language::Zh, None); }
+                    if v.starts_with("en") {
+                        return (Language::En, None);
+                    }
+                    if v.starts_with("zh") {
+                        return (Language::Zh, None);
+                    }
                 }
             }
         }
     }
 
     if let Some(accept_lang) = headers.get(ACCEPT_LANGUAGE).and_then(|v| v.to_str().ok()) {
-        let first = accept_lang.split(',').next().unwrap_or("").to_ascii_lowercase();
+        let first = accept_lang
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
         if first.starts_with("zh") {
             return (Language::Zh, None);
         }

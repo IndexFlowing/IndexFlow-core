@@ -1,22 +1,5 @@
-use crate::domain::QualityGateResult;
-use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct HealthCheck {
-    pub id: i64,
-    pub url_id: i64,
-    pub http_status: Option<i32>,
-    pub response_time: Option<i32>,
-    pub has_noindex: bool,
-    pub has_canonical: bool,
-    pub meta_description: Option<String>,
-    pub h1_content: Option<String>,
-    pub robots_directive: Option<String>,
-    pub payload_bytes: Option<i32>,
-    pub hreflang: Option<String>,
-    pub checked_at: chrono::DateTime<chrono::Utc>,
-}
+use crate::domain::{HealthCheck, QualityGateResult};
+use sqlx::SqlitePool;
 
 #[derive(Clone)]
 pub struct HealthCheckRepo {
@@ -57,5 +40,14 @@ impl HealthCheckRepo {
         .fetch_one(&self.pool)
         .await?;
         Ok(row)
+    }
+
+    pub async fn list_by_url(&self, url_id: i64) -> anyhow::Result<Vec<HealthCheck>> {
+        Ok(sqlx::query_as::<_, HealthCheck>(
+            "SELECT * FROM health_checks WHERE url_id = $1 ORDER BY checked_at ASC, id ASC",
+        )
+        .bind(url_id)
+        .fetch_all(&self.pool)
+        .await?)
     }
 }

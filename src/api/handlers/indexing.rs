@@ -108,11 +108,11 @@ pub async fn render_indexing(
             is_gsc_running: state
                 .site_service
                 .pipeline
-                .is_running(PipelineStage::GscInspect),
+                .is_running(current_site_id, PipelineStage::GscInspect),
             is_bing_running: state
                 .site_service
                 .pipeline
-                .is_running(PipelineStage::BingInspect),
+                .is_running(current_site_id, PipelineStage::BingInspect),
             dry_run: state.dry_run,
         },
         set_cookie,

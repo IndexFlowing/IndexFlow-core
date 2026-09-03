@@ -292,6 +292,11 @@ IndexFlow 在公开环境中持续开发。
 
 ---
 
+# 正在使用此工具的网站
+
+[mandarinclips 官方网站](https://www.mandarinclips.com)
+[墨香阁 官方网站](https://www.inkvilion.com)
+
 # 📄 开源协议
 
 本项目采用以下任一许可证：

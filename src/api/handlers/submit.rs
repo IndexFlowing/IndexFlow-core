@@ -88,7 +88,7 @@ pub async fn render_submit(
             is_running: state
                 .site_service
                 .pipeline
-                .is_running(PipelineStage::PushSubmit),
+                .is_running(current_site_id, PipelineStage::PushSubmit),
             dry_run: state.dry_run,
         },
         set_cookie,

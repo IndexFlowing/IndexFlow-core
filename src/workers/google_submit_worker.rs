@@ -4,7 +4,6 @@ use crate::domain::{PipelineStage, ProviderKind};
 use crate::infrastructure::{SiteRepo, SubmissionLogRepo, UrlRepo};
 use chrono::{Duration as ChronoDuration, Utc};
 use std::sync::Arc;
-use std::collections::HashSet;
 use std::time::Duration;
 use tracing::{error, info};
 
@@ -51,73 +50,80 @@ impl GoogleSubmitWorker {
     }
 
     async fn tick(&self) -> anyhow::Result<()> {
-        if !self.pipeline.is_running(PipelineStage::PushSubmit) {
+        let running_sites = self.pipeline.running_sites_for_stage(PipelineStage::PushSubmit);
+        if running_sites.is_empty() {
             return Ok(());
         }
 
-        let pending = self.urls.fetch_pending_google(self.config.submit_worker_batch).await?;
-        if pending.is_empty() {
-            let bing_left = self.urls.fetch_pending_bing(1).await?;
-            if bing_left.is_empty() {
-                self.pipeline.stop(PipelineStage::PushSubmit);
-                info!("🎉 全引擎提交队列已全部处理完毕，Worker 回到待机");
-            }
-            return Ok(());
-        }
-
-        let mut exhausted_sites: HashSet<i64> = Default::default();
-        for url in pending {
-            if !self.pipeline.is_running(PipelineStage::PushSubmit) {
-                break;
-            }
-
-            if exhausted_sites.contains(&url.site_id) {
+        for site_id in running_sites {
+            if !self.pipeline.is_running(site_id, PipelineStage::PushSubmit) {
                 continue;
             }
 
-            if let Ok(Some(site)) = self.sites.find_by_id(url.site_id).await {
-                if !site.google_ready() {
-                    continue;
+            let pending = self.urls.fetch_pending_google(site_id, self.config.submit_worker_batch).await?;
+            if pending.is_empty() {
+                let bing_left = self.urls.fetch_pending_bing(site_id, 1).await?;
+                if bing_left.is_empty() {
+                    self.pipeline.stop(site_id, PipelineStage::PushSubmit);
+                    info!(site_id, "🎉 该站点全引擎提交队列已全部处理完毕，Worker 回到待机");
+                }
+                continue;
+            }
+
+            let mut site_quota_exhausted = false;
+            for url in pending {
+                if !self.pipeline.is_running(site_id, PipelineStage::PushSubmit) {
+                    break;
                 }
 
-                let quota = self.logs.google_quota_window(site.id, site.google_daily_quota as u32).await?;
-                if quota.exhausted() {
-                    let until = quota.next_free_at.unwrap_or_else(|| Utc::now() + ChronoDuration::hours(24));
-                    let _ = self.sites.set_google_quota_paused_until(site.id, until).await;
-                    exhausted_sites.insert(site.id);
-                    continue;
+                if site_quota_exhausted {
+                    break;
                 }
 
-                match self.submission.submit_url_google(&site, &url.url).await {
-                    Ok(res) => {
-                        let _ = self
-                            .logs
-                            .insert(
-                                url.id,
-                                ProviderKind::Google,
-                                res.is_success,
-                                res.status_code.map(|c| c as i32),
-                                res.response_msg.as_deref(),
-                            )
-                            .await;
-
-                        let st = if res.is_success { "SUBMITTED" } else { "FAILED" };
-                        let _ = self
-                            .urls
-                            .apply_submit_outcome(
-                                url.id,
-                                None,
-                                None,
-                                Some(st),
-                                res.response_msg.as_deref(),
-                            )
-                            .await;
+                if let Ok(Some(site)) = self.sites.find_by_id(url.site_id).await {
+                    if !site.google_ready() {
+                        continue;
                     }
-                    Err(e) => {
-                        let _ = self
-                            .urls
-                            .apply_submit_outcome(url.id, None, None, Some("FAILED"), Some(&e.to_string()))
-                            .await;
+
+                    let quota = self.logs.google_quota_window(site.id, site.google_daily_quota as u32).await?;
+                    if quota.exhausted() {
+                        let until = quota.next_free_at.unwrap_or_else(|| Utc::now() + ChronoDuration::hours(24));
+                        let _ = self.sites.set_google_quota_paused_until(site.id, until).await;
+                        site_quota_exhausted = true;
+                        continue;
+                    }
+
+                    match self.submission.submit_url_google(&site, &url.url).await {
+                        Ok(res) => {
+                            let _ = self
+                                .logs
+                                .insert(
+                                    url.id,
+                                    ProviderKind::Google,
+                                    res.is_success,
+                                    res.status_code.map(|c| c as i32),
+                                    res.response_msg.as_deref(),
+                                )
+                                .await;
+
+                            let st = if res.is_success { "SUBMITTED" } else { "FAILED" };
+                            let _ = self
+                                .urls
+                                .apply_submit_outcome(
+                                    url.id,
+                                    None,
+                                    None,
+                                    Some(st),
+                                    res.response_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                        Err(e) => {
+                            let _ = self
+                                .urls
+                                .apply_submit_outcome(url.id, None, None, Some("FAILED"), Some(&e.to_string()))
+                                .await;
+                        }
                     }
                 }
             }

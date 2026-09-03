@@ -61,7 +61,7 @@ async fn build_action(
     stage: PipelineStage,
     site_id: i64,
 ) -> PipelineActionTemplate {
-    let is_running = state.site_service.pipeline.is_running(stage);
+    let is_running = state.site_service.pipeline.is_running(site_id, stage);
     let (is_disabled, disabled_text) = if stage == PipelineStage::GscInspect && !is_running {
         let stats = state
             .site_service
@@ -110,12 +110,12 @@ pub async fn action_pipeline_start(
     Query(q): Query<QueryParams>,
 ) -> Response {
     let site_id = q.site_id.unwrap_or(1);
-    let started = state.site_service.pipeline.start(stage);
+    let started = state.site_service.pipeline.start(site_id, stage);
     info!(
         stage = %stage,
         site_id,
         started,
-        running = ?state.site_service.pipeline.running_stages(),
+        running = ?state.site_service.pipeline.running_stages(site_id),
         "🚀 [Pipeline] 启动阶段"
     );
     with_refresh(render_action(state, stage, site_id).await)
@@ -127,12 +127,12 @@ pub async fn action_pipeline_stop(
     Query(q): Query<QueryParams>,
 ) -> Response {
     let site_id = q.site_id.unwrap_or(1);
-    let stopped = state.site_service.pipeline.stop(stage);
+    let stopped = state.site_service.pipeline.stop(site_id, stage);
     info!(
         stage = %stage,
         site_id,
         stopped,
-        running = ?state.site_service.pipeline.running_stages(),
+        running = ?state.site_service.pipeline.running_stages(site_id),
         "⏹️ [Pipeline] 停止阶段"
     );
     with_refresh(render_action(state, stage, site_id).await)

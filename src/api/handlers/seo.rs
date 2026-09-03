@@ -87,7 +87,7 @@ pub async fn render_seo(
             is_running: state
                 .site_service
                 .pipeline
-                .is_running(PipelineStage::SeoGate),
+                .is_running(current_site_id, PipelineStage::SeoGate),
             dry_run: state.dry_run,
         },
         set_cookie,

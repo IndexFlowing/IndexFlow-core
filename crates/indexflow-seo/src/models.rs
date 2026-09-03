@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+/// 页面标题大纲层级项 (H1 ~ H6).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HeadingItem {
+    pub level: u8,
+    pub text: String,
+}
+
 /// 多语言交替映射项.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct HreflangItem {
@@ -37,7 +44,6 @@ pub struct AiBotDirectives {
 }
 
 impl AiBotDirectives {
-    /// `true` if any tracked AI crawler is blocked from indexing / training.
     pub fn any_blocked(&self) -> bool {
         self.gptbot_blocked
             || self.perplexity_blocked
@@ -75,11 +81,13 @@ pub struct SeoAuditResult {
     pub http_status: Option<i32>,
     pub response_time_ms: Option<i32>,
     pub payload_bytes: Option<i32>,
+    pub word_count: usize,
 
     pub page_title: Option<String>,
     pub meta_description: Option<String>,
     pub h1_content: Option<String>,
     pub h1_count: usize,
+    pub headings: Vec<HeadingItem>,
 
     pub canonical_url: Option<String>,
     pub has_canonical: bool,
@@ -103,7 +111,6 @@ pub struct SeoAuditResult {
 }
 
 impl SeoAuditResult {
-    /// 序列化 hreflang 数组为 JSON 字符串，供数据库存储.
     pub fn hreflang_json(&self) -> Option<String> {
         if self.hreflang.is_empty() {
             None
@@ -112,8 +119,6 @@ impl SeoAuditResult {
         }
     }
 
-    /// All Schema.org `@type` values, including those nested under `@graph`
-    /// and array-typed `@type`. Order is document order; duplicates dropped.
     pub fn schema_types(&self) -> Vec<String> {
         let mut out = Vec::new();
         for block in &self.json_ld {

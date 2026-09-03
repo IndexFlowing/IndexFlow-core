@@ -3,9 +3,20 @@ use crate::domain::QualityGateResult;
 use chrono::{DateTime, Utc};
 
 impl UrlRepo {
+    pub async fn set_watched(&self, id: i64, watched: bool) -> anyhow::Result<()> {
+        sqlx::query("UPDATE urls SET is_watched = $2, watched_at = CASE WHEN $2 = 1 THEN CURRENT_TIMESTAMP ELSE watched_at END WHERE id = $1")
+            .bind(id).bind(watched).execute(&self.pool).await?;
+        Ok(())
+    }
     /// 持久化技术 SEO 门禁扫描结果
     pub async fn persist_seo_scan(&self, id: i64, gate: &QualityGateResult) -> anyhow::Result<()> {
-        let status = if !gate.passed { "FAIL" } else if gate.warnings.is_empty() { "PASS" } else { "WARN" };
+        let status = if !gate.passed {
+            "FAIL"
+        } else if gate.warnings.is_empty() {
+            "PASS"
+        } else {
+            "WARN"
+        };
         sqlx::query(
             r#"
             UPDATE urls
@@ -43,10 +54,23 @@ impl UrlRepo {
         .bind(gate.block_reason.as_deref())
         .bind(i64::try_from(gate.h1_count).unwrap_or(i64::MAX))
         .bind(gate.has_nofollow)
-        .bind({ let names = gate.ai_directives.blocked_names(); (!names.is_empty()).then(|| names.join(",")) })
-        .bind(gate.opengraph.title.is_some() || gate.opengraph.description.is_some() || gate.opengraph.image.is_some() || gate.opengraph.og_type.is_some() || gate.opengraph.url.is_some() || gate.opengraph.site_name.is_some())
+        .bind({
+            let names = gate.ai_directives.blocked_names();
+            (!names.is_empty()).then(|| names.join(","))
+        })
+        .bind(
+            gate.opengraph.title.is_some()
+                || gate.opengraph.description.is_some()
+                || gate.opengraph.image.is_some()
+                || gate.opengraph.og_type.is_some()
+                || gate.opengraph.url.is_some()
+                || gate.opengraph.site_name.is_some(),
+        )
         .bind(gate.twitter_card.card.is_some())
-        .bind({ let types = gate.schema_types(); (!types.is_empty()).then(|| types.join(",")) })
+        .bind({
+            let types = gate.schema_types();
+            (!types.is_empty()).then(|| types.join(","))
+        })
         .bind(gate.response_time_ms)
         .bind(gate.payload_bytes)
         .bind(gate.has_viewport)

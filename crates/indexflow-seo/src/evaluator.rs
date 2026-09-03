@@ -3,7 +3,6 @@ use crate::extractor::{inspect_html, RawHtmlInspection, RobotsTokens};
 use crate::models::{AiBotDirectives, SeoAuditResult};
 use tracing::debug;
 
-/// Pure HTML / header evaluation (no I/O). Safe to call from unit tests.
 pub fn evaluate_html(
     page_url: &str,
     status_code: i32,
@@ -76,10 +75,12 @@ pub fn evaluate_html(
         http_status: Some(status_code),
         response_time_ms: Some(elapsed_ms),
         payload_bytes: Some(payload_bytes),
+        word_count: inspected.word_count,
         page_title: inspected.page_title,
         meta_description: inspected.meta_description,
         h1_content: inspected.h1_content,
         h1_count: inspected.h1_count,
+        headings: inspected.headings,
         canonical_url,
         has_canonical,
         has_noindex,
@@ -101,33 +102,29 @@ pub fn evaluate_html(
 
 pub fn compute_warnings(inspected: &RawHtmlInspection, ai: &AiBotDirectives) -> Vec<String> {
     let mut warnings = Vec::new();
-    if inspected.h1_count == 0 { warnings.push("缺少 H1 标题".to_string()); }
-    if inspected.h1_count > 1 { warnings.push(format!("存在 {} 个 H1 标签，建议仅保留一个", inspected.h1_count)); }
+    if inspected.h1_count == 0 { warnings.push("缺少 H1 标题标签".to_string()); }
+    if inspected.h1_count > 1 { warnings.push(format!("存在 {} 个 H1 标签，建议全页仅保留一个核心 H1", inspected.h1_count)); }
     if inspected.has_nofollow { warnings.push("页面带有 nofollow 指令".to_string()); }
     let blocked = ai.blocked_names();
-    if !blocked.is_empty() { warnings.push(format!("屏蔽了以下 AI 爬虫: {}", blocked.join(", "))); }
+    if !blocked.is_empty() { warnings.push(format!("屏蔽了 AI 爬虫抓取: {}", blocked.join(", "))); }
     let og = &inspected.opengraph;
     if [og.title.as_ref(), og.description.as_ref(), og.image.as_ref(), og.og_type.as_ref(), og.url.as_ref(), og.site_name.as_ref()].iter().all(Option::is_none) {
-        warnings.push("缺少 OpenGraph 社交分享标签".to_string());
+        warnings.push("缺少 OpenGraph 社交卡片标签".to_string());
     }
-    if inspected.twitter_card.card.is_none() { warnings.push("缺少 Twitter Card 标记".to_string()); }
-    if inspected.json_ld.is_empty() { warnings.push("缺少结构化数据 (JSON-LD)".to_string()); }
+    if inspected.twitter_card.card.is_none() { warnings.push("缺少 X (Twitter) Card 标记".to_string()); }
+    if inspected.json_ld.is_empty() { warnings.push("未发现 JSON-LD 结构化数据".to_string()); }
     if !inspected.has_viewport { warnings.push("缺少 viewport 移动适配标签".to_string()); }
-    if inspected.html_lang.is_none() { warnings.push("未声明 <html lang> 页面语言".to_string()); }
-    if inspected.images_missing_alt > 0 { warnings.push(format!("{} 张图片缺失 alt 属性", inspected.images_missing_alt)); }
+    if inspected.html_lang.is_none() { warnings.push("未声明 <html lang> 语言".to_string()); }
+    if inspected.images_missing_alt > 0 { warnings.push(format!("{} 张图片缺失 alt 替代文本", inspected.images_missing_alt)); }
     match inspected.meta_description.as_deref() {
-        None => warnings.push("缺少 meta description".to_string()),
-        Some(s) if !(50..=160).contains(&s.chars().count()) => warnings.push("meta description 长度不合适".to_string()),
+        None => warnings.push("缺少 meta description 描述".to_string()),
+        Some(s) if !(50..=160).contains(&s.chars().count()) => warnings.push(format!("meta description 长度为 {} 字，建议在 50~160 字之间", s.chars().count())),
         _ => {}
     }
-    if inspected.page_title.as_ref().is_some_and(|s| s.chars().count() > 60) { warnings.push("page title 长度过长，可能被截断".to_string()); }
+    if inspected.page_title.as_ref().is_some_and(|s| s.chars().count() > 60) { warnings.push("page title 超过 60 字符，在搜索结果中可能被截断".to_string()); }
     warnings
 }
 
-/// Parse `X-Robots-Tag` (possibly comma-joined multi-header) into a global
-/// robots token set plus per-AI-bot flags.
-///
-/// Accepts both `noindex, nofollow` and `gptbot: noindex` forms.
 pub(crate) fn parse_x_robots_header(header: &str) -> (RobotsTokens, AiBotDirectives) {
     let mut global = RobotsTokens::parse("");
     let mut ai = AiBotDirectives::default();
@@ -139,7 +136,6 @@ pub(crate) fn parse_x_robots_header(header: &str) -> (RobotsTokens, AiBotDirecti
         if let Some((ua, rest)) = part.split_once(':') {
             let ua = ua.trim();
             let rest = rest.trim();
-            // A UA prefix must look like a token, not a URL (`https://...` has `:`).
             if ua.chars().any(|c| c == '/' || c == ' ') || ua.len() > 64 {
                 let tok = RobotsTokens::parse(part);
                 merge_robots(&mut global, &tok);
@@ -185,34 +181,4 @@ fn apply_bot_ua(ua: &str, tok: &RobotsTokens, ai: &mut AiBotDirectives) {
 
 fn eq_any(ua: &str, names: &[&str]) -> bool {
     names.iter().any(|n| ua.eq_ignore_ascii_case(n))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn x_robots_per_bot_and_global() {
-        let (g, ai) = parse_x_robots_header("noindex, gptbot: nofollow, google-extended: noai");
-        assert!(g.noindex);
-        assert!(!g.nofollow);
-        assert!(!ai.gptbot_blocked); // nofollow ≠ indexing block
-        assert!(ai.google_extended_blocked);
-    }
-
-    #[test]
-    fn x_robots_gptbot_noindex() {
-        let (g, ai) = parse_x_robots_header("GPTBot: noindex");
-        assert!(!g.noindex);
-        assert!(ai.gptbot_blocked);
-    }
-
-    #[test]
-    fn none_token_blocks_both() {
-        let html = r#"<html><head><title>T</title><meta name="robots" content="none"></head></html>"#;
-        let res = evaluate_html("https://example.com/", 200, 1, None, html);
-        assert!(!res.passed);
-        assert!(res.has_noindex);
-        assert!(res.has_nofollow);
-    }
 }

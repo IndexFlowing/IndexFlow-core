@@ -37,7 +37,11 @@ impl SubmissionLogRepo {
         Ok(row)
     }
 
-    pub async fn google_quota_window(&self, site_id: i64, total: u32) -> anyhow::Result<GoogleQuotaWindow> {
+    pub async fn google_quota_window(
+        &self,
+        site_id: i64,
+        total: u32,
+    ) -> anyhow::Result<GoogleQuotaWindow> {
         let row: (i64, Option<DateTime<Utc>>) = sqlx::query_as(
             r#"
             SELECT COUNT(*), MIN(sl.created_at)
@@ -54,6 +58,15 @@ impl SubmissionLogRepo {
         .await?;
 
         Ok(GoogleQuotaWindow::new(row.0, total, row.1))
+    }
+
+    pub async fn list_by_url(&self, url_id: i64) -> anyhow::Result<Vec<SubmissionLog>> {
+        Ok(sqlx::query_as::<_, SubmissionLog>(
+            "SELECT * FROM submission_logs WHERE url_id = $1 ORDER BY created_at ASC, id ASC",
+        )
+        .bind(url_id)
+        .fetch_all(&self.pool)
+        .await?)
     }
 }
 
@@ -75,7 +88,8 @@ mod tests {
             .await?;
 
         let repo = SubmissionLogRepo::new(pool);
-        repo.insert(1, ProviderKind::Google, true, Some(200), None).await?;
+        repo.insert(1, ProviderKind::Google, true, Some(200), None)
+            .await?;
 
         let site_one = repo.google_quota_window(1, 1).await?;
         let site_two = repo.google_quota_window(2, 1).await?;

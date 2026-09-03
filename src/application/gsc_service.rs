@@ -1,5 +1,5 @@
 use crate::domain::coverage_to_index_status;
-use crate::infrastructure::{Site, SiteRepo, UrlRepo};
+use crate::infrastructure::{IndexHistoryRepo, Site, SiteRepo, UrlRepo};
 use crate::providers::google::{GoogleProvider, GscInspectResult};
 use chrono::Utc;
 use tracing::info;
@@ -9,19 +9,32 @@ pub struct GscService {
     google: GoogleProvider,
     sites: SiteRepo,
     urls: UrlRepo,
+    history: IndexHistoryRepo,
 }
 
 impl GscService {
-    pub fn new(google: GoogleProvider, sites: SiteRepo, urls: UrlRepo) -> Self {
+    pub fn new(
+        google: GoogleProvider,
+        sites: SiteRepo,
+        urls: UrlRepo,
+        history: IndexHistoryRepo,
+    ) -> Self {
         Self {
             google,
             sites,
             urls,
+            history,
         }
     }
 
-    pub async fn test_credentials(&self, service_account_json: &str, domain: &str) -> anyhow::Result<String> {
-        self.google.resolve_gsc_property(service_account_json, domain).await
+    pub async fn test_credentials(
+        &self,
+        service_account_json: &str,
+        domain: &str,
+    ) -> anyhow::Result<String> {
+        self.google
+            .resolve_gsc_property(service_account_json, domain)
+            .await
     }
 
     /// 单条 URL 深度检测
@@ -30,10 +43,9 @@ impl GscService {
         site: &Site,
         page_url: &str,
     ) -> anyhow::Result<GscInspectResult> {
-        let sa = site
-            .google_service_account_json
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("No Google credentials configured for site: {}", site.domain))?;
+        let sa = site.google_service_account_json.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("No Google credentials configured for site: {}", site.domain)
+        })?;
 
         let property = if let Some(ref p) = site.gsc_property_url {
             p.clone()
@@ -63,13 +75,19 @@ impl GscService {
 
         info!(domain = %site.domain, property = %property, "⚡ 正在从 Google Search Analytics 批量同步曝光收录池...");
 
-        let indexed_urls = self.google.fetch_search_analytics_pages(sa, &property).await?;
+        let indexed_urls = self
+            .google
+            .fetch_search_analytics_pages(sa, &property)
+            .await?;
         if indexed_urls.is_empty() {
             info!(domain = %site.domain, "Search Analytics 未返回任何曝光 URL");
             return Ok(0);
         }
 
-        let updated_count = self.urls.batch_mark_gsc_indexed(site.id, &indexed_urls).await?;
+        let updated_count = self
+            .urls
+            .batch_mark_gsc_indexed(site.id, &indexed_urls)
+            .await?;
         info!(
             domain = %site.domain,
             pulled_count = indexed_urls.len(),
@@ -84,9 +102,13 @@ impl GscService {
         &self,
         url_id: i64,
         result: &GscInspectResult,
+        is_watched: bool,
     ) -> anyhow::Result<()> {
         if result.ok {
-            let coverage = result.coverage_state.as_deref().unwrap_or("URL is unknown to Google");
+            let coverage = result
+                .coverage_state
+                .as_deref()
+                .unwrap_or("URL is unknown to Google");
             let index_status = coverage_to_index_status(coverage);
             let crawled = result
                 .last_crawl_time
@@ -97,6 +119,11 @@ impl GscService {
             self.urls
                 .apply_gsc_inspection(url_id, index_status, Some(coverage), crawled)
                 .await?;
+            if is_watched {
+                self.history
+                    .insert_if_changed(url_id, "google", index_status, Some(coverage), crawled)
+                    .await?;
+            }
         }
         Ok(())
     }

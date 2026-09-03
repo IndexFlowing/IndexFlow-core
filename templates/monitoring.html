@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ t.monitoring_title }} - IndexFlow{% endblock %}
+{% block content %}
+<div class="space-y-5">
+  <div class="flex items-center justify-between"><h1 class="text-xl font-bold">📈 {{ t.monitoring_title }}</h1><span class="text-xs text-slate-500">{{ watched.len() }} watched</span></div>
+  <section class="rounded-2xl bg-slate-900/50 border border-slate-800 p-5">
+    <h2 class="font-semibold text-emerald-300 mb-4">{{ t.monitoring_watched }}</h2>
+    {% if watched.is_empty() %}<p class="text-sm text-slate-500 py-8 text-center">{{ t.monitoring_empty }}</p>{% else %}
+    <div class="divide-y divide-slate-800">{% for url in watched %}<div class="py-3 flex items-center justify-between gap-4"><div class="min-w-0"><a href="/monitoring/{{ url.id }}?site_id={{ current_site_id }}" class="text-sm text-slate-100 hover:text-cyan-300 truncate block">{{ url.display_title() }}</a><span class="text-xs text-slate-500 font-mono truncate block">{{ url.url }}</span></div><button onclick="watch({{ url.id }}, false)" class="shrink-0 px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20 text-xs">{{ t.monitoring_remove }}</button></div>{% endfor %}</div>{% endif %}
+  </section>
+  <section class="rounded-2xl bg-slate-900/50 border border-slate-800 p-5">
+    <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-cyan-300">{{ t.monitoring_candidates }}</h2><button onclick="batchWatch()" class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold">{{ t.monitoring_add }}</button></div>
+    <div class="divide-y divide-slate-800">{% for url in candidates %}{% if !url.is_watched %}<label class="py-3 flex items-center gap-3 cursor-pointer"><input type="checkbox" value="{{ url.id }}" class="watch-choice accent-cyan-500"><span class="min-w-0"><span class="text-sm text-slate-200 truncate block">{{ url.display_title() }}</span><span class="text-xs text-slate-500 font-mono truncate block">{{ url.url }}</span></span></label>{% endif %}{% endfor %}</div>
+  </section>
+</div>
+<script>
+async function watch(id, watched) { await fetch('/api/v1/monitoring/' + id + '/watch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({watched})}); location.reload(); }
+async function batchWatch() { const selected=[...document.querySelectorAll('.watch-choice:checked')].map(x=>Number(x.value)); await fetch('/api/v1/monitoring/batch-watch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selected_ids:selected,watched:true})}); location.reload(); }
+</script>
+{% endblock %}

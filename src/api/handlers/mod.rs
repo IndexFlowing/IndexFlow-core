@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod dashboard;
 pub mod indexing;
+pub mod monitoring;
 pub mod pipeline;
 pub mod seo;
 pub mod settings;

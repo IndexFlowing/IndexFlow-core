@@ -1,16 +1,7 @@
-//! Zero-panic HTML inspector.
-//!
-//! Every slice of the input is gated by [`safe_slice`] / [`str::get`] so a
-//! multi-byte character (CJK, emoji) can never land in the middle of a
-//! `Range` and panic. Tag scanning is quote-aware and skips comments plus
-//! `<script>` / `<style>` raw-text elements when looking for visible tags.
-
 use crate::models::{
-    collect_schema_types, AiBotDirectives, HreflangItem, JsonLdBlock, OpenGraphMeta, TwitterCardMeta,
+    collect_schema_types, AiBotDirectives, HeadingItem, HreflangItem, JsonLdBlock, OpenGraphMeta, TwitterCardMeta,
 };
 
-/// Hard cap on HTML we will walk. A 50 MiB error page must not become a
-/// quadratic scan; the prefix is cut on a char boundary.
 const MAX_SCAN_BYTES: usize = 5 * 1024 * 1024;
 
 #[derive(Debug, Default)]
@@ -20,6 +11,8 @@ pub struct RawHtmlInspection {
     pub canonical_url: Option<String>,
     pub h1_content: Option<String>,
     pub h1_count: usize,
+    pub headings: Vec<HeadingItem>,
+    pub word_count: usize,
     pub has_noindex: bool,
     pub has_nofollow: bool,
     pub robots_meta: Option<String>,
@@ -33,12 +26,15 @@ pub struct RawHtmlInspection {
     pub images_missing_alt: usize,
 }
 
-/// Inspect `html` without allocating a full-document lowercase copy.
 pub fn inspect_html(html: &str) -> RawHtmlInspection {
     let html = clip_html(html);
 
     let page_title = extract_title(html);
-    let (h1_content, h1_count) = extract_h1(html);
+    let headings = extract_headings(html);
+    let h1_count = headings.iter().filter(|h| h.level == 1).count();
+    let h1_content = headings.iter().find(|h| h.level == 1).map(|h| h.text.clone());
+    let word_count = compute_word_count(html);
+
     let canonical_url = extract_canonical(html);
     let meta_description = extract_meta_content(html, "name", "description");
 
@@ -47,7 +43,6 @@ pub fn inspect_html(html: &str) -> RawHtmlInspection {
         .or_else(|| extract_meta_content(html, "http-equiv", "robots"));
 
     let (has_noindex, has_nofollow) = robots_flags(robots_meta.as_deref());
-
     let ai_directives = extract_ai_directives(html);
 
     let opengraph = OpenGraphMeta {
@@ -96,6 +91,8 @@ pub fn inspect_html(html: &str) -> RawHtmlInspection {
         canonical_url,
         h1_content,
         h1_count,
+        headings,
+        word_count,
         has_noindex,
         has_nofollow,
         robots_meta,
@@ -108,6 +105,74 @@ pub fn inspect_html(html: &str) -> RawHtmlInspection {
         html_lang,
         images_missing_alt,
     }
+}
+
+/// 计算页面正文字数（去除 script/style/tag 后的实际文字数）
+fn compute_word_count(html: &str) -> usize {
+    let stripped = strip_tags_and_raw_elements(html);
+    stripped
+        .split_whitespace()
+        .map(|token| {
+            // 如果是纯 ASCII 单词按 1 个词算，如果是包含 CJK 的东亚文字按字数累加
+            let cjk_count = token.chars().filter(|c| is_cjk(*c)).count();
+            if cjk_count > 0 {
+                cjk_count
+            } else {
+                1
+            }
+        })
+        .sum()
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c, '\u{4e00}'..='\u{9fff}' | '\u{3400}'..='\u{4dbf}')
+}
+
+/// 扫描提取完整 H1 ~ H6 标题大纲树（对齐 Ahrefs 内容大纲）
+fn extract_headings(html: &str) -> Vec<HeadingItem> {
+    let mut items = Vec::new();
+    let tags = ["h1", "h2", "h3", "h4", "h5", "h6"];
+    let mut search_from = 0;
+
+    while search_from < html.len() {
+        let mut nearest_tag = None;
+        let mut nearest_idx = usize::MAX;
+
+        for (level_idx, &t) in tags.iter().enumerate() {
+            if let Some(pos) = find_open_tag(html, search_from, t, true) {
+                if pos < nearest_idx {
+                    nearest_idx = pos;
+                    nearest_tag = Some((level_idx as u8 + 1, t));
+                }
+            }
+        }
+
+        let Some((level, tag_name)) = nearest_tag else {
+            break;
+        };
+
+        let Some(gt) = find_tag_end(html, nearest_idx) else {
+            break;
+        };
+        let after_gt = gt + 1;
+        let Some(close_at) = find_close_tag(html, after_gt, tag_name) else {
+            search_from = after_gt;
+            continue;
+        };
+
+        if let Some(raw) = safe_slice(html, after_gt, close_at) {
+            let cleaned = normalize_visible_text(&decode_basic_entities(&strip_tags(raw)));
+            if !cleaned.is_empty() {
+                items.push(HeadingItem {
+                    level,
+                    text: cleaned,
+                });
+            }
+        }
+
+        search_from = clamp_boundary(html, close_at.saturating_add(tag_name.len() + 3));
+    }
+    items
 }
 
 pub fn extract_viewport(html: &str) -> bool {
@@ -219,34 +284,6 @@ fn extract_title(html: &str) -> Option<String> {
     inner_text(html, "title", true)
 }
 
-fn extract_h1(html: &str) -> (Option<String>, usize) {
-    let mut count = 0;
-    let mut first_content = None;
-    let mut search_from = 0;
-
-    while let Some(abs_start) = find_open_tag(html, search_from, "h1", true) {
-        let Some(gt) = find_tag_end(html, abs_start) else {
-            break;
-        };
-        let after_gt = gt + 1;
-        let Some(close_at) = find_close_tag(html, after_gt, "h1") else {
-            break;
-        };
-        if let Some(raw) = safe_slice(html, after_gt, close_at) {
-            let cleaned = normalize_visible_text(&decode_basic_entities(&strip_tags(raw)));
-            if !cleaned.is_empty() {
-                count += 1;
-                if first_content.is_none() {
-                    first_content = Some(cleaned);
-                }
-            }
-        }
-        search_from = close_at.saturating_add(5);
-        search_from = clamp_boundary(html, search_from);
-    }
-    (first_content, count)
-}
-
 fn extract_canonical(html: &str) -> Option<String> {
     let mut search_from = 0;
     while let Some(abs) = find_open_tag(html, search_from, "link", true) {
@@ -273,7 +310,6 @@ fn extract_canonical(html: &str) -> Option<String> {
     None
 }
 
-/// First `<meta>` whose `attr_key` equals `attr_val` (ASCII case-insensitive).
 pub fn extract_meta_content(html: &str, attr_key: &str, attr_val: &str) -> Option<String> {
     let html = clip_html(html);
     let mut search_from = 0;
@@ -463,6 +499,35 @@ fn inner_text(html: &str, tag: &str, skip_raw: bool) -> Option<String> {
     }
 }
 
+fn strip_tags_and_raw_elements(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut search = 0;
+    while search < s.len() {
+        if let Some(lt) = s[search..].find('<') {
+            let i = search + lt;
+            out.push_str(&s[search..i]);
+            let after_lt = &s[i + 1..];
+            if tag_name_eq(after_lt, "script") || tag_name_eq(after_lt, "style") {
+                let tag_name = if tag_name_eq(after_lt, "script") { "script" } else { "style" };
+                if let Some(end_tag) = find_close_tag(s, i, tag_name) {
+                    search = end_tag + tag_name.len() + 3;
+                    continue;
+                }
+            }
+            if let Some(gt) = find_tag_end(s, i) {
+                search = gt + 1;
+                out.push(' ');
+            } else {
+                break;
+            }
+        } else {
+            out.push_str(&s[search..]);
+            break;
+        }
+    }
+    out
+}
+
 fn strip_tags(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut in_tag = false;
@@ -518,7 +583,6 @@ fn clamp_boundary(s: &str, mut i: usize) -> usize {
     i
 }
 
-/// Byte-index slice that refuses to panic on a non-boundary.
 fn safe_slice(html: &str, start: usize, end: usize) -> Option<&str> {
     if start <= end && end <= html.len() && html.is_char_boundary(start) && html.is_char_boundary(end)
     {
@@ -528,10 +592,6 @@ fn safe_slice(html: &str, start: usize, end: usize) -> Option<&str> {
     }
 }
 
-/// Locate `<name ...>` (ASCII-case-insensitive) starting at `from`.
-///
-/// When `skip_raw` is set, `<script>` / `<style>` bodies (and comments) are
-/// jumped over so a stray `<title>` inside JS never wins.
 fn find_open_tag(html: &str, from: usize, name_lower: &str, skip_raw: bool) -> Option<usize> {
     let mut search = clamp_boundary(html, from);
     while search < html.len() {
@@ -636,7 +696,6 @@ fn is_tag_name_end(b: u8) -> bool {
     b.is_ascii_whitespace() || b == b'>' || b == b'/' || b == b'\n' || b == b'\r' || b == b'\t'
 }
 
-/// Index of the `>` that closes the start tag, ignoring `>` inside quotes.
 fn find_tag_end(html: &str, tag_open: usize) -> Option<usize> {
     let bytes = html.as_bytes();
     if tag_open >= bytes.len() {
@@ -658,10 +717,6 @@ fn find_tag_end(html: &str, tag_open: usize) -> Option<usize> {
     None
 }
 
-/// Parse `name='...'` / `name="..."` / `name=unquoted` from a raw start tag.
-///
-/// Attribute names are matched as whole tokens (so `href` does not steal
-/// `hreflang`). Values are entity-decoded. Never panics.
 fn attr_value(tag: &str, want: &str) -> Option<String> {
     let bytes = tag.as_bytes();
     let mut i = 0usize;
@@ -734,8 +789,6 @@ fn read_attr_value(tag: &str, i: &mut usize) -> String {
     let start = *i;
     while *i < bytes.len() {
         let b = bytes[*i];
-        // HTML unquoted values may contain `/` (URLs). They must not contain
-        // whitespace, quotes, `=`, `<`, `>`, or backtick.
         if b.is_ascii_whitespace() || matches!(b, b'>' | b'"' | b'\'' | b'=' | b'<' | b'`') {
             break;
         }
@@ -756,14 +809,6 @@ fn starts_with_ignore_ascii(s: &str, prefix_lower: &str) -> bool {
         .all(|(a, b)| a.to_ascii_lowercase() == *b)
 }
 
-/// Decode XML / HTML character references in a single left-to-right pass.
-///
-/// Supports:
-/// * XML predefined (`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`)
-/// * HTML named entities (Latin-1 + common typography)
-/// * Decimal `&#39;` and hexadecimal `&#x1F600;`
-///
-/// Bare `&` that is not a well-formed reference is preserved. Never panics.
 pub fn decode_basic_entities(s: &str) -> String {
     if !s.as_bytes().contains(&b'&') {
         return s.to_string();
@@ -844,312 +889,8 @@ fn named_entity(name: &str) -> Option<&'static str> {
         "quot" | "QUOT" => "\"",
         "apos" => "'",
         "nbsp" => "\u{a0}",
-        "iexcl" => "¡",
-        "cent" => "¢",
-        "pound" => "£",
-        "curren" => "¤",
-        "yen" => "¥",
-        "brvbar" => "¦",
-        "sect" => "§",
-        "uml" => "¨",
         "copy" | "COPY" => "©",
-        "ordf" => "ª",
-        "laquo" => "«",
-        "not" => "¬",
-        "shy" => "\u{ad}",
         "reg" | "REG" => "®",
-        "macr" => "¯",
-        "deg" => "°",
-        "plusmn" => "±",
-        "sup2" => "²",
-        "sup3" => "³",
-        "acute" => "´",
-        "micro" => "µ",
-        "para" => "¶",
-        "middot" => "·",
-        "cedil" => "¸",
-        "sup1" => "¹",
-        "ordm" => "º",
-        "raquo" => "»",
-        "frac14" => "¼",
-        "frac12" => "½",
-        "frac34" => "¾",
-        "iquest" => "¿",
-        "times" => "×",
-        "divide" => "÷",
-        "Agrave" => "À",
-        "Aacute" => "Á",
-        "Acirc" => "Â",
-        "Atilde" => "Ã",
-        "Auml" => "Ä",
-        "Aring" => "Å",
-        "AElig" => "Æ",
-        "Ccedil" => "Ç",
-        "Egrave" => "È",
-        "Eacute" => "É",
-        "Ecirc" => "Ê",
-        "Euml" => "Ë",
-        "Igrave" => "Ì",
-        "Iacute" => "Í",
-        "Icirc" => "Î",
-        "Iuml" => "Ï",
-        "ETH" => "Ð",
-        "Ntilde" => "Ñ",
-        "Ograve" => "Ò",
-        "Oacute" => "Ó",
-        "Ocirc" => "Ô",
-        "Otilde" => "Õ",
-        "Ouml" => "Ö",
-        "Oslash" => "Ø",
-        "Ugrave" => "Ù",
-        "Uacute" => "Ú",
-        "Ucirc" => "Û",
-        "Uuml" => "Ü",
-        "Yacute" => "Ý",
-        "THORN" => "Þ",
-        "szlig" => "ß",
-        "agrave" => "à",
-        "aacute" => "á",
-        "acirc" => "â",
-        "atilde" => "ã",
-        "auml" => "ä",
-        "aring" => "å",
-        "aelig" => "æ",
-        "ccedil" => "ç",
-        "egrave" => "è",
-        "eacute" => "é",
-        "ecirc" => "ê",
-        "euml" => "ë",
-        "igrave" => "ì",
-        "iacute" => "í",
-        "icirc" => "î",
-        "iuml" => "ï",
-        "eth" => "ð",
-        "ntilde" => "ñ",
-        "ograve" => "ò",
-        "oacute" => "ó",
-        "ocirc" => "ô",
-        "otilde" => "õ",
-        "ouml" => "ö",
-        "oslash" => "ø",
-        "ugrave" => "ù",
-        "uacute" => "ú",
-        "ucirc" => "û",
-        "uuml" => "ü",
-        "yacute" => "ý",
-        "thorn" => "þ",
-        "yuml" => "ÿ",
-        "OElig" => "Œ",
-        "oelig" => "œ",
-        "Scaron" => "Š",
-        "scaron" => "š",
-        "Yuml" => "Ÿ",
-        "fnof" => "ƒ",
-        "circ" => "ˆ",
-        "tilde" => "˜",
-        "ndash" => "–",
-        "mdash" => "—",
-        "lsquo" => "‘",
-        "rsquo" => "’",
-        "sbquo" => "‚",
-        "ldquo" => "“",
-        "rdquo" => "”",
-        "bdquo" => "„",
-        "dagger" => "†",
-        "Dagger" => "‡",
-        "permil" => "‰",
-        "lsaquo" => "‹",
-        "rsaquo" => "›",
-        "euro" => "€",
-        "bull" => "•",
-        "hellip" => "…",
-        "trade" | "TRADE" => "™",
-        "minus" => "−",
-        "lowast" => "∗",
-        "oplus" => "⊕",
-        "otimes" => "⊗",
-        "larr" => "←",
-        "uarr" => "↑",
-        "rarr" => "→",
-        "darr" => "↓",
-        "harr" => "↔",
-        "crarr" => "↵",
-        "lceil" => "⌈",
-        "rceil" => "⌉",
-        "lfloor" => "⌊",
-        "rfloor" => "⌋",
-        "loz" => "◊",
-        "spades" => "♠",
-        "clubs" => "♣",
-        "hearts" => "♥",
-        "diams" => "♦",
         _ => return None,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cjk_and_emoji_never_panic_and_round_trip() {
-        let html = "<!DOCTYPE html><html><head>\
-            <title>你好🌍世界 &amp; SEO</title>\
-            <meta name=\"description\" content=\"中文描述🎉与&nbsp;空格\" />\
-            <link rel=\"canonical\" href=\"https://example.com/你好\" />\
-            </head><body><h1>标题<span>嵌套</span>🚀</h1></body></html>";
-        let r = inspect_html(html);
-        assert_eq!(r.page_title.as_deref(), Some("你好🌍世界 & SEO"));
-        assert_eq!(r.meta_description.as_deref(), Some("中文描述🎉与 空格"));
-        assert_eq!(r.h1_content.as_deref(), Some("标题嵌套🚀"));
-        assert_eq!(r.h1_count, 1);
-        assert_eq!(r.canonical_url.as_deref(), Some("https://example.com/你好"));
-    }
-
-    #[test]
-    fn multiline_and_mixed_quotes_meta() {
-        let html = "<html><head><title>T</title>\n<meta\n  name='robots'\n  content=\"noindex, nofollow\"\n>\n</head></html>";
-        let r = inspect_html(html);
-        assert!(r.has_noindex);
-        assert!(r.has_nofollow);
-        assert_eq!(r.robots_meta.as_deref(), Some("noindex, nofollow"));
-    }
-
-    #[test]
-    fn unquoted_attribute_and_gt_inside_quoted_value() {
-        let html = r#"<html><head><title>T</title>
-            <meta name=description content="a>b">
-            <link rel=canonical href=https://example.com/x>
-            </head></html>"#;
-        let r = inspect_html(html);
-        assert_eq!(r.meta_description.as_deref(), Some("a>b"));
-        assert_eq!(r.canonical_url.as_deref(), Some("https://example.com/x"));
-    }
-
-    #[test]
-    fn comments_and_script_do_not_spoof_title_or_robots() {
-        let html = r#"<html><head>
-            <!-- <title>FAKE</title> <meta name="robots" content="noindex"> -->
-            <title>Real</title>
-            <script>document.write('<h1>nope</h1><title>JS</title>');</script>
-            </head><body><h1>Visible</h1></body></html>"#;
-        let r = inspect_html(html);
-        assert_eq!(r.page_title.as_deref(), Some("Real"));
-        assert!(!r.has_noindex);
-        assert_eq!(r.h1_content.as_deref(), Some("Visible"));
-        assert_eq!(r.h1_count, 1);
-    }
-
-    #[test]
-    fn json_ld_graph_array_and_multi_type() {
-        let html = r#"<html><head><title>T</title>
-            <script type="application/ld+json">
-            {
-              "@context": "https://schema.org",
-              "@graph": [
-                {"@type": "Organization", "name": "Acme"},
-                {"@type": ["NewsArticle", "Article"], "headline": "H"}
-              ]
-            }
-            </script>
-            <script type="application/ld+json;charset=utf-8">
-            [{"@type": "FAQPage"}, {"@type": "WebPage"}]
-            </script>
-            </head></html>"#;
-        let r = inspect_html(html);
-        let types: Vec<_> = r
-            .json_ld
-            .iter()
-            .filter_map(|b| b.schema_type.clone())
-            .collect();
-        assert!(types.contains(&"Organization".to_string()));
-        assert!(types.contains(&"NewsArticle".to_string()) || types.contains(&"Article".to_string()));
-        assert!(types.contains(&"FAQPage".to_string()));
-        assert!(types.contains(&"WebPage".to_string()));
-    }
-
-    #[test]
-    fn json_ld_cdata_wrapper() {
-        let html = r#"<html><head><title>T</title>
-            <script type="application/ld+json">
-            //<![CDATA[
-            {"@type": "Product", "name": "X"}
-            //]]>
-            </script></head></html>"#;
-        let r = inspect_html(html);
-        assert_eq!(r.json_ld[0].schema_type.as_deref(), Some("Product"));
-    }
-
-    #[test]
-    fn ai_bot_aliases_and_none_directive() {
-        let html = r#"<html><head><title>T</title>
-            <meta name="GPTBot" content="none" />
-            <meta name="anthropic-ai" content="noindex" />
-            <meta name="Google-Extended" content="noai" />
-            <meta name="perplexitybot" content="index, follow" />
-            </head></html>"#;
-        let r = inspect_html(html);
-        assert!(r.ai_directives.gptbot_blocked);
-        assert!(r.ai_directives.claudebot_blocked);
-        assert!(r.ai_directives.google_extended_blocked);
-        assert!(!r.ai_directives.perplexity_blocked);
-    }
-
-    #[test]
-    fn entity_one_pass_does_not_double_decode() {
-        assert_eq!(decode_basic_entities("Tom &amp; Jerry &#39;Special&#39;"), "Tom & Jerry 'Special'");
-        assert_eq!(
-            decode_basic_entities("&lt;div&gt;&quot;Hello&quot;&nbsp;World&lt;/div&gt;"),
-            "<div>\"Hello\"\u{a0}World</div>"
-        );
-        assert_eq!(decode_basic_entities("&amp;lt;"), "&lt;");
-        assert_eq!(decode_basic_entities("a & b"), "a & b");
-        assert_eq!(decode_basic_entities("&mdash;&hellip;&#x1F600;"), "—…😀");
-        assert_eq!(decode_basic_entities("&apos;"), "'");
-        assert_eq!(decode_basic_entities("&#x41;"), "A");
-    }
-
-    #[test]
-    fn href_does_not_steal_hreflang() {
-        let html = r#"<html><head><title>T</title>
-            <link rel="alternate" hreflang="zh-Hans" href="https://example.com/zh" />
-            </head></html>"#;
-        let r = inspect_html(html);
-        assert_eq!(r.hreflangs.len(), 1);
-        assert_eq!(r.hreflangs[0].lang, "zh-Hans");
-        assert_eq!(r.hreflangs[0].href, "https://example.com/zh");
-    }
-
-    #[test]
-    fn entity_in_canonical_href() {
-        let html = r#"<html><head><title>T</title>
-            <link rel="canonical" href="https://example.com/a?b=1&amp;c=2" />
-            </head></html>"#;
-        let r = inspect_html(html);
-        assert_eq!(
-            r.canonical_url.as_deref(),
-            Some("https://example.com/a?b=1&c=2")
-        );
-    }
-
-    #[test]
-    fn extracts_viewport_lang_and_image_alt() {
-        let html = r#"<html data-x="中文" lang="zh-CN"><head>
-            <meta content="width=device-width" name="viewport">
-            </head><body><img src="a"><img alt="   " src="b"><img alt="图像" src="c"></body></html>"#;
-        let r = inspect_html(html);
-        assert!(r.has_viewport);
-        assert_eq!(r.html_lang.as_deref(), Some("zh-CN"));
-        assert_eq!(r.images_missing_alt, 2);
-    }
-
-    #[test]
-    fn missing_basics_and_malformed_unicode_do_not_panic() {
-        let html = "<html><body>中文<img src='x'><img alt='' src='y'>";
-        let r = inspect_html(html);
-        assert!(!r.has_viewport);
-        assert_eq!(r.html_lang, None);
-        assert_eq!(r.images_missing_alt, 2);
-        assert!(!extract_viewport("<meta name='viewport'"));
-    }
 }

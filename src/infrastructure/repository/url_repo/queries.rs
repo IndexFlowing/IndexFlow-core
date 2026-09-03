@@ -3,6 +3,10 @@ use crate::domain::{DashboardStats, Url};
 use chrono::{DateTime, Utc};
 
 impl UrlRepo {
+    pub async fn fetch_watched(&self, site_id: i64) -> anyhow::Result<Vec<Url>> {
+        Ok(sqlx::query_as::<_, Url>("SELECT * FROM urls WHERE site_id = $1 AND is_watched = 1 ORDER BY watched_at DESC, id DESC")
+            .bind(site_id).fetch_all(&self.pool).await?)
+    }
     pub async fn dashboard_stats(&self, site_id: i64) -> anyhow::Result<DashboardStats> {
         let row: (
              i64,

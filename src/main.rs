@@ -15,8 +15,8 @@ use crate::application::{
 };
 use crate::config::AppConfig;
 use crate::infrastructure::{
-    build_http_client, connect, migrate, AdminRepo, HealthCheckRepo, SiteRepo, SubmissionLogRepo,
-    UrlRepo, ViewBoostRegistry,
+    build_http_client, connect, migrate, AdminRepo, HealthCheckRepo, IndexHistoryRepo, SiteRepo,
+    SubmissionLogRepo, UrlRepo, ViewBoostRegistry,
 };
 use crate::providers::{bing::BingProvider, google::GoogleProvider};
 use crate::workers::{
@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
     let url_repo = UrlRepo::new(pool.clone());
     let health_repo = HealthCheckRepo::new(pool.clone());
     let submission_log_repo = SubmissionLogRepo::new(pool.clone());
+    let index_history_repo = IndexHistoryRepo::new(pool.clone());
     let admin_repo = Arc::new(AdminRepo::new(pool.clone()));
 
     let bing_provider = BingProvider::new(http.clone(), config.dry_run);
@@ -64,8 +65,17 @@ async fn main() -> anyhow::Result<()> {
     let sitemap_service = SitemapService::new(http.clone());
     let health_service = HealthService::new(http.clone())?;
     let submission_service = SubmissionService::new(bing_provider.clone(), google_provider.clone());
-    let gsc_service = GscService::new(google_provider.clone(), site_repo.clone(), url_repo.clone());
-    let bing_service = BingService::new(bing_provider.clone(), url_repo.clone());
+    let gsc_service = GscService::new(
+        google_provider.clone(),
+        site_repo.clone(),
+        url_repo.clone(),
+        index_history_repo.clone(),
+    );
+    let bing_service = BingService::new(
+        bing_provider.clone(),
+        url_repo.clone(),
+        index_history_repo.clone(),
+    );
 
     let url_service = Arc::new(UrlService::new(
         url_repo.clone(),
@@ -76,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
         submission_service.clone(),
         gsc_service.clone(),
         bing_service.clone(),
+        index_history_repo,
     ));
 
     Arc::new(SyncWorker::new(
