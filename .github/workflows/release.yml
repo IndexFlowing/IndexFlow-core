@@ -23,7 +23,7 @@ jobs:
             os: ubuntu-24.04-arm
             archive: tar.gz
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-15-intel
             archive: tar.gz
           - target: aarch64-apple-darwin
             os: macos-14
@@ -87,14 +87,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-      - name: Publish indexflow-sitemap
-        run: cargo publish --locked --package indexflow-sitemap --token "$CARGO_REGISTRY_TOKEN"
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      - name: Publish indexflow-seo
-        run: cargo publish --locked --package indexflow-seo --token "$CARGO_REGISTRY_TOKEN"
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       - name: Publish indexflow-core
         run: cargo publish --locked --package indexflow-core --token "$CARGO_REGISTRY_TOKEN"
         env:
