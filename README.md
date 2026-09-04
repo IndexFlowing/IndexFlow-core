@@ -154,6 +154,26 @@ Documentation:
 
 # ⚡ Quick Start
 
+## Install and Run
+
+The Rust libraries are available from crates.io as `indexflow-sitemap` and
+`indexflow-seo`. Add either crate to your project, or download a platform
+binary from the [GitHub Releases](https://github.com/IndexFlowing/IndexFlow-core/releases)
+page.
+
+For the self-hosted application, replace `YOUR_DOCKERHUB_USERNAME` with your
+Docker Hub username, then run the published image:
+
+```bash
+docker run --name indexflow --publish 8080:8080 \
+  --volume indexflow-data:/app/data \
+  --env JWT_SECRET=change-me-in-production \
+  docker.io/YOUR_DOCKERHUB_USERNAME/indexflow-core:latest
+```
+
+Release binaries are named for their version and target and include a
+`.sha256` checksum file.
+
 Add the components you need to your Rust project.
 
 For example:

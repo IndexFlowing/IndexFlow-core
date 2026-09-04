@@ -4,7 +4,14 @@ version = "0.1.0"
 edition = "2021"
 description = "Open Core Search Index Infrastructure"
 authors = ["IndexFlow Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/IndexFlowing/IndexFlow-core"
+homepage = "https://www.indexflowing.com"
 publish = false
+
+[workspace]
+members = ["crates/indexflow-sitemap", "crates/indexflow-seo"]
+resolver = "2"
 
 [dependencies]
 # 内部独立库

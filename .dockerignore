@@ -1,0 +1,8 @@
+.git
+.agentbridge
+.env
+target
+indexflow.db*
+images
+README*
+*.bat
