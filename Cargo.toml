@@ -7,7 +7,16 @@ authors = ["IndexFlow Team"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/IndexFlowing/IndexFlow-core"
 homepage = "https://www.indexflowing.com"
-publish = false
+readme = "README.md"
+keywords = ["seo", "sitemap", "search", "indexing", "web"]
+categories = ["web-programming", "command-line-utilities"]
+include = [
+    "src/**/*",
+    "templates/**/*",
+    "migrations/**/*",
+    "Cargo.toml",
+    "README.md",
+]
 
 [workspace]
 members = ["crates/indexflow-sitemap", "crates/indexflow-seo"]
@@ -15,8 +24,8 @@ resolver = "2"
 
 [dependencies]
 # 内部独立库
-indexflow-sitemap = { path = "crates/indexflow-sitemap" }
-indexflow-seo = { path = "crates/indexflow-seo" }
+indexflow-sitemap = { version = "0.1.1", path = "crates/indexflow-sitemap" }
+indexflow-seo = { version = "0.1.3", path = "crates/indexflow-seo" }
 
 # Web
 axum = { version = "0.7", features = ["macros"] }
