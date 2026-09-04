@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{{ url.display_title() }} - 技术 SEO 诊断报告{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto pb-12 font-sans">
+    
+    <!-- 返回导航与顶部操作 -->
+    <div class="flex items-center justify-between">
+        <a href="/seo?site_id={{ current_site_id }}" class="text-xs text-slate-400 hover:text-cyan-400 flex items-center gap-1.5 transition">
+            <span>&larr;</span> <span>返回 SEO 质量门禁清单</span>
+        </a>
+
+        <div class="flex items-center gap-2">
+            <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=seo"
+                    hx-swap="none"
+                    hx-on::after-request="showToast('重新质检完成'); setTimeout(() => location.reload(), 500)"
+                    class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold text-xs transition border border-slate-700">
+                <span>🛡️</span> 重新质检该网页
+            </button>
+            <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" 
+               class="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition flex items-center gap-1 shadow-md shadow-cyan-500/20">
+                <span>↗</span> <span>访问原网页</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 网页核心 URL 状态卡片 -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">URL #{{ url.id }}</span>
+            <span class="text-xs text-slate-400 font-mono">{{ url.locale }} · 路径 {{ url.path_prefix }}</span>
+            {% if url.is_seo_pass() %}
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ 门禁通过 (200 OK)</span>
+            {% else if url.is_seo_warn() %}
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">⚠️ 存在优化建议 ({{ url.warning_count() }})</span>
+            {% else %}
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">🛑 门禁拦截</span>
+            {% endif %}
+        </div>
+
+        <h1 class="text-lg font-bold text-white font-mono break-all">{{ url.url }}</h1>
+    </div>
+
+    <!-- 直接复用 5 大诊断卡片组件 -->
+    {% include "partials/seo_audit_cards.html" %}
+
+</div>
+{% endblock %}

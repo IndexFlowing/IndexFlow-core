@@ -1,0 +1,212 @@
+<div id="seo-table-container">
+
+    <!-- 批量操作浮动提示栏 -->
+    <div id="seo-batch-bar" class="hidden px-5 py-2.5 bg-amber-950/90 border-b border-amber-500/30 flex items-center justify-between transition-all duration-200">
+        <div class="flex items-center gap-2 text-xs text-amber-200">
+            <span>⚡</span>
+            <span>已选中 <b id="seo-selected-count" class="text-white font-mono text-sm">0</b> 个网页</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="clearAllSeoSelection()" class="px-3 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-xs text-slate-300 transition cursor-pointer">
+                取消选择
+            </button>
+            <button id="seo-batch-submit-btn"
+                    onclick="submitSeoBatchRecheck(this)"
+                    class="px-3.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-amber-950/40 flex items-center gap-1.5 cursor-pointer">
+                <span>🛡️</span> 批量重新质检
+            </button>
+        </div>
+    </div>
+
+    <!-- 工具栏 (Tabs + 搜索) -->
+    <div class="px-4 py-3 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/40">
+        <div class="inline-flex items-center p-1 rounded-xl bg-slate-950 border border-slate-800/80 text-xs">
+            <a href="?site_id={{ current_site_id }}" 
+               class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap {% if filter_status.is_none() || filter_status.as_deref() == Some("") %}bg-slate-800 text-white font-semibold shadow-sm{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                全部 <span class="ml-1 opacity-60 font-mono text-[11px]">{{ stats.url_total }}</span>
+            </a>
+
+            <a href="?site_id={{ current_site_id }}&status=PASS" 
+               class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("PASS") %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold{% else %}text-slate-400 hover:text-emerald-400{% endif %}">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                正常通过 <span class="font-mono text-[11px]">{{ stats.seo_passed }}</span>
+            </a>
+
+            <a href="?site_id={{ current_site_id }}&status=WARN"
+               class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("WARN") %}bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold{% else %}text-slate-400 hover:text-amber-400{% endif %}">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                存在警告 <span class="font-mono text-[11px]">{{ stats.seo_warnings }}</span>
+            </a>
+
+            <a href="?site_id={{ current_site_id }}&status=FAIL" 
+               class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("FAIL") %}bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold{% else %}text-slate-400 hover:text-rose-400{% endif %}">
+                <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                异常拦截 <span class="font-mono text-[11px]">{{ stats.seo_issues }}</span>
+            </a>
+
+            <a href="?site_id={{ current_site_id }}&status=PENDING" 
+               class="px-3 py-1 rounded-lg font-medium transition whitespace-nowrap flex items-center gap-1.5 {% if filter_status.as_deref() == Some("PENDING") %}bg-slate-800 text-slate-200 font-semibold{% else %}text-slate-400 hover:text-slate-200{% endif %}">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                待质检 <span class="font-mono text-[11px]">{{ stats.pending_seo_audit() }}</span>
+            </a>
+        </div>
+
+        <form method="GET" action="/seo" class="flex items-center gap-2">
+            <input type="hidden" name="site_id" value="{{ current_site_id }}">
+            {% if let Some(st) = filter_status %}<input type="hidden" name="status" value="{{ st }}">{% endif %}
+
+            <div class="relative">
+                <input type="text" name="q" value="{{ query_str.as_deref().unwrap_or("") }}" placeholder="搜索 URL / 标题..." 
+                       class="h-8 w-48 sm:w-60 rounded-xl border border-slate-800 bg-slate-950 pl-3 pr-8 text-xs text-slate-200 placeholder-slate-500 hover:border-slate-700 focus:border-cyan-500/50 focus:outline-none transition">
+                <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 text-xs p-1">
+                    ⏎
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 数据表格 -->
+    {% if items.is_empty() %}
+    <div class="py-16 text-center space-y-2.5">
+        <div class="text-3xl opacity-60">🎉</div>
+        <div class="text-xs font-semibold text-slate-300">未检索到匹配的页面记录</div>
+        <p class="text-[11px] text-slate-500 max-w-xs mx-auto">请尝试调整筛选条件或点击上方「启动 SEO 增量质检」</p>
+    </div>
+    {% else %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs divide-y divide-slate-800/80">
+            <thead class="bg-slate-950/60 uppercase text-[10px] text-slate-400 font-semibold tracking-wider">
+                <tr>
+                    <th class="pl-4 pr-2 py-3 w-10 text-center">
+                        <input type="checkbox" id="seo-select-all" onchange="toggleSelectAllSeo(this)"
+                               class="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+                    </th>
+                    <th class="px-4 py-3 font-medium">页面标题与 URL (点击直接访问原站)</th>
+                    <th class="px-4 py-3 font-medium w-24">HTTP 状态</th>
+                    <th class="px-4 py-3 font-medium w-28">门禁判定</th>
+                    <th class="px-4 py-3 font-medium min-w-[260px]">SEO 质检明细与优化建议</th>
+                    <th class="px-4 py-3 font-medium w-36">扫描时间</th>
+                    <th class="px-4 py-3 font-medium w-36 text-right">查看 SEO 数据</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/40">
+                {% for url in items %}
+                <tr id="seo-row-{{ url.id }}" 
+                    data-url-id="{{ url.id }}"
+                    onclick="openSeoDrawer(this.dataset.urlId)" 
+                    class="hover:bg-slate-800/40 transition cursor-pointer group">
+                    
+                    <td class="pl-4 pr-2 py-3 text-center" onclick="event.stopPropagation()">
+                        <input type="checkbox" name="selected_ids" value="{{ url.id }}" onchange="updateSeoBatchBar()"
+                               class="seo-row-checkbox w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
+                    </td>
+
+                    <td class="px-4 py-3 max-w-md">
+                        <div class="font-medium text-slate-200 group-hover:text-cyan-300 transition truncate text-xs">
+                            {{ url.display_title() }}
+                        </div>
+                        <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" 
+                           onclick="event.stopPropagation()"
+                           class="text-cyan-400 hover:text-cyan-300 hover:underline font-mono text-[11px] inline-flex items-center gap-1 mt-1 truncate max-w-full">
+                            <span class="truncate">{{ url.url }}</span>
+                            <span class="text-slate-500 shrink-0">↗</span>
+                        </a>
+                    </td>
+
+                    <td class="seo-cell-http px-4 py-3 font-mono text-xs whitespace-nowrap">
+                        {% if url.http_status == Some(200) %}
+                        <span class="text-emerald-400 font-semibold">200 OK</span>
+                        {% else if let Some(code) = url.http_status %}
+                        <span class="text-rose-400 font-semibold">{{ code }}</span>
+                        {% else %}
+                        <span class="text-slate-600">-</span>
+                        {% endif %}
+                    </td>
+
+                    <td class="seo-cell-status px-4 py-3 whitespace-nowrap">
+                        {% if url.is_seo_pass() %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>正常通过
+                        </span>
+                        {% else if url.is_seo_fail() %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>异常拦截
+                        </span>
+                        {% else if url.is_seo_warn() %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>存在警告
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>待质检
+                        </span>
+                        {% endif %}
+                    </td>
+
+                    <td class="seo-cell-issue px-4 py-3 text-[11px]">
+                        {% if url.is_seo_fail() %}
+                        <div class="text-rose-400 font-medium flex items-center gap-1.5 truncate" title="{{ url.seo_issue.as_deref().unwrap_or("") }}">
+                            <span class="shrink-0">🛑</span>
+                            <span class="truncate">{{ url.seo_issue.as_deref().unwrap_or("存在阻断项") }}</span>
+                        </div>
+                        {% else if url.is_seo_warn() %}
+                        <div class="flex items-center gap-2 truncate" title="{{ url.seo_warnings.as_deref().unwrap_or("") }}">
+                            <span class="px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono text-[10px] font-bold shrink-0">
+                                {{ url.warning_count() }} 条建议
+                            </span>
+                            <span class="text-amber-200/90 truncate font-sans">
+                                {{ url.primary_warning().unwrap_or("存在软性优化建议") }}
+                            </span>
+                        </div>
+                        {% else if url.is_seo_pass() %}
+                        <div class="text-emerald-400/80 font-mono text-[11px] flex items-center gap-1">
+                            <span>✓</span> <span>核心技术 SEO 达标</span>
+                        </div>
+                        {% else %}
+                        <span class="text-slate-500 font-mono">-</span>
+                        {% endif %}
+                    </td>
+
+                    <td class="seo-cell-time px-4 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
+                        {% if let Some(t) = url.last_checked_at %}{{ t }}{% else %}-{% endif %}
+                    </td>
+
+                    <td class="px-4 py-3 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                        <div class="flex items-center justify-end gap-1.5">
+                            <button type="button"
+                                    data-url-id="{{ url.id }}"
+                                    onclick="openSeoDrawer(this.dataset.urlId)" 
+                                    class="px-2.5 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1">
+                                <span>🔍</span> <span>诊断详情</span>
+                            </button>
+                            <a href="/seo/detail/{{ url.id }}" 
+                               target="_blank"
+                               title="新标签页全屏查看该页面 SEO 报告"
+                               class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition">
+                                <span>⛶</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 分页栏 -->
+    <div class="px-5 py-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 bg-slate-950/30">
+        <div>
+            共 <span class="text-slate-200 font-mono font-semibold">{{ total }}</span> 条 · 第 <span class="text-slate-200 font-mono">{{ page }}</span> / {{ (total + limit - 1) / limit }} 页
+        </div>
+        <div class="flex items-center gap-1.5">
+            {% if page > 1 %}
+            <a href="?site_id={{ current_site_id }}&page={{ page - 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">上一页</a>
+            {% endif %}
+            {% if page * limit < total %}
+            <a href="?site_id={{ current_site_id }}&page={{ page + 1 }}&status={{ filter_status.as_deref().unwrap_or("") }}&q={{ query_str.as_deref().unwrap_or("") }}" class="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 transition text-xs">下一页</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>

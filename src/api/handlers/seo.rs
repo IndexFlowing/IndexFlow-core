@@ -94,3 +94,47 @@ pub async fn render_seo(
     )
     .into_response()
 }
+
+#[derive(Template)]
+#[template(path = "seo_detail.html")]
+pub struct SeoDetailTemplate {
+    pub lang: &'static str,
+    pub t: &'static Translations,
+    pub url: Url,
+    pub all_sites: Vec<Site>,
+    pub current_site_id: i64,
+    pub dry_run: bool,
+}
+
+pub async fn render_seo_detail_page(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+    Query(q): Query<QueryParams>,
+) -> Response {
+    if let Some(redirect) = check_auth_or_redirect(&state, &headers).await {
+        return redirect;
+    }
+    let (lang, set_cookie) = detect_language(&headers, q.lang.as_deref());
+    let t = get_translations(lang);
+
+    let Some(url) = state.url_service.find_by_id(id).await.ok().flatten() else {
+        return axum::http::StatusCode::NOT_FOUND.into_response();
+    };
+
+    let all_sites = state.site_service.list_sites().await.unwrap_or_default();
+    let current_site_id = url.site_id;
+
+    HtmlTemplate(
+        SeoDetailTemplate {
+            lang: lang.as_str(),
+            t,
+            url,
+            all_sites,
+            current_site_id,
+            dry_run: state.dry_run,
+        },
+        set_cookie,
+    )
+    .into_response()
+}

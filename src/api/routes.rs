@@ -12,7 +12,7 @@ use super::handlers::{
         action_batch_inspect, action_batch_submit, action_inspect_url, action_pipeline_start,
         action_pipeline_stop, action_pipeline_sync, action_submit_url, render_pipeline_action,
     },
-    seo::render_seo,
+    seo::{render_seo, render_seo_detail_page},
     settings::{
         handle_delete_site, handle_save_settings, handle_test_bing_webmaster, handle_test_google,
         handle_test_indexnow, render_settings,
@@ -34,6 +34,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(render_dashboard))
         .route("/sitemap", get(render_sitemap))
         .route("/seo", get(render_seo))
+        .route("/seo/detail/:id", get(render_seo_detail_page))
         .route("/indexing", get(render_indexing))
         .route("/monitoring", get(render_monitoring_list))
         .route("/monitoring/:id", get(render_monitoring_detail))
@@ -66,8 +67,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/urls/:id/inspect", post(action_inspect_url))
         .route("/urls/:id/submit", post(action_submit_url))
         .route("/urls/batch-inspect", post(action_batch_inspect))
-        .route("/urls/batch-submit", post(action_batch_submit));
-    let api_routes = api_routes
+        .route("/urls/batch-submit", post(action_batch_submit))
         .route("/monitoring/:id/watch", post(action_toggle_watch))
         .route("/monitoring/batch-watch", post(action_batch_watch));
 

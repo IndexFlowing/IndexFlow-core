@@ -1,19 +1,17 @@
-<!-- Ahrefs 级技术 SEO 与收录诊断抽屉 -->
+<!-- 诊断抽屉容器 -->
 <div id="url-drawer-root" class="fixed inset-0 z-50 overflow-hidden font-sans">
-    <!-- 遮罩背景 -->
     <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-300 ease-out" 
          onclick="document.getElementById('url-drawer-root').remove()"></div>
 
     <div class="fixed inset-y-0 right-0 max-w-full flex pl-10">
         <div class="w-screen max-w-3xl bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col transform transition ease-in-out duration-300">
             
-            <!-- 1. 顶部 Header 与当前 URL -->
+            <!-- 顶部 Header -->
             <div class="px-6 py-5 border-b border-slate-800 bg-slate-950/80 backdrop-blur flex items-start justify-between shrink-0">
                 <div class="space-y-1.5 min-w-0 pr-4">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">URL #{{ url.id }}</span>
                         <span class="text-xs text-slate-400 font-mono">{{ url.locale }} · 路径 {{ url.path_prefix }}</span>
-                        
                         {% if url.is_seo_pass() %}
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ 门禁通过</span>
                         {% else if url.is_seo_warn() %}
@@ -32,324 +30,15 @@
                 </div>
 
                 <button onclick="document.getElementById('url-drawer-root').remove()" 
-                        class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition text-lg shrink-0"
-                        title="关闭">✕</button>
+                        class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition text-lg shrink-0">✕</button>
             </div>
 
-            <!-- 2. 可滚动主区域：Ahrefs 式深度分类检查面板 -->
+            <!-- 主内容区：直接复用 5 大诊断卡片组件 -->
             <div class="flex-1 overflow-y-auto p-6 space-y-6 text-slate-200 text-xs">
-
-                <!-- 优化建议速报 (Ahrefs 警告汇总) -->
-                {% if !url.seo_warnings_list().is_empty() || url.seo_issue.is_some() %}
-                <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-                    <div class="flex items-center justify-between text-amber-300 font-bold">
-                        <span class="flex items-center gap-1.5">
-                            <span>⚠️</span> <span>Ahrefs 级技术质检问题清单 ({{ url.warning_count() }})</span>
-                        </span>
-                        <span class="font-mono text-[11px]">HTTP {{ url.http_status.unwrap_or(0) }}</span>
-                    </div>
-                    <ul class="space-y-1.5 pl-5 list-disc text-amber-200/90 text-xs">
-                        {% if let Some(issue) = url.seo_issue %}
-                        <li class="font-bold text-rose-400">🛑 门禁拦截：{{ issue }}</li>
-                        {% endif %}
-                        {% for warning in url.seo_warnings_list() %}
-                        <li>{{ warning }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% endif %}
-
-                <!-- 【Ahrefs 模块 1】：元信息 (Meta Information) -->
-                <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">📑</span>
-                            <h4 class="font-bold text-white text-xs uppercase tracking-wider">元信息 (Meta Information)</h4>
-                        </div>
-                        <span class="text-slate-500 font-mono text-[11px]">加载耗时: {{ url.response_time_ms.unwrap_or(0) }}ms</span>
-                    </div>
-
-                    <div class="space-y-3.5">
-                        <!-- 标题 Title (对标 Ahrefs 38/60 标尺) -->
-                        <div class="space-y-1">
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold text-slate-400">标题 (Title)</span>
-                                {% let title_len = url.title_char_count() %}
-                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold {% if title_len == 0 %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% else if title_len > 60 %}bg-amber-500/10 text-amber-400 border border-amber-500/20{% else %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% endif %}">
-                                    {{ title_len }} / 60 字符
-                                </span>
-                            </div>
-                            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 font-medium">
-                                {{ url.page_title.as_deref().unwrap_or("<未配置 Title 标签>") }}
-                            </div>
-                        </div>
-
-                        <!-- 描述 Description (对标 Ahrefs 缺失警告) -->
-                        <div class="space-y-1">
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold text-slate-400">描述 (Meta Description)</span>
-                                {% let desc_len = url.desc_char_count() %}
-                                {% if desc_len == 0 %}
-                                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                                    <span>⚠️</span> <span>缺失 (Missing)</span>
-                                </span>
-                                {% else %}
-                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold {% if desc_len >= 50 && desc_len <= 160 %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% else %}bg-amber-500/10 text-amber-400 border border-amber-500/20{% endif %}">
-                                    {{ desc_len }} / 160 字符
-                                </span>
-                                {% endif %}
-                            </div>
-                            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 leading-relaxed">
-                                {{ url.meta_description.as_deref().unwrap_or("<页面未在 HTML <head> 中配置 meta description 描述>") }}
-                            </div>
-                        </div>
-
-                        <!-- 规范 URL (Canonical) -->
-                        <div class="space-y-1">
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold text-slate-400">规范 URL (Canonical URL)</span>
-                                {% if url.canonical_url.is_some() %}
-                                <span class="text-emerald-400 font-semibold flex items-center gap-1">
-                                    <span>✓</span> <span>在 HTML 中已声明</span>
-                                </span>
-                                {% else %}
-                                <span class="text-rose-400 font-semibold flex items-center gap-1">
-                                    <span>🛑</span> <span>缺失 (Missing)</span>
-                                </span>
-                                {% endif %}
-                            </div>
-                            <div class="p-2 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-300 break-all">
-                                {{ url.canonical_url.as_deref().unwrap_or("<未在渲染的 HTML 中发现 link rel=canonical>") }}
-                            </div>
-                        </div>
-
-                        <!-- 移动端视口与语言 -->
-                        <div class="grid grid-cols-2 gap-3 pt-1">
-                            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                                <span class="text-slate-400">移动端 Viewport</span>
-                                <span class="font-semibold {% if url.has_viewport %}text-emerald-400{% else %}text-amber-400{% endif %}">
-                                    {% if url.has_viewport %}✓ 已配置{% else %}⚠️ 缺失{% endif %}
-                                </span>
-                            </div>
-                            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                                <span class="text-slate-400">&lt;html lang&gt; 语言</span>
-                                <span class="font-mono font-semibold {% if url.html_lang.is_some() %}text-cyan-400{% else %}text-amber-400{% endif %}">
-                                    {{ url.html_lang.as_deref().unwrap_or("⚠️ 未声明") }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 【Ahrefs 模块 2】：可索引性与 Robots 指令 (Indexability) -->
-                <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🚦</span>
-                            <h4 class="font-bold text-white text-xs uppercase tracking-wider">可索引性 (Indexability)</h4>
-                        </div>
-                        <span class="text-slate-500 font-mono text-[11px]">HTTP 状态: {{ url.http_status.unwrap_or(0) }}</span>
-                    </div>
-
-                    <div class="space-y-3">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                                <div class="text-[11px] text-slate-500 font-semibold">Robots.txt</div>
-                                <a href="/robots.txt" target="_blank" class="text-cyan-400 hover:underline block truncate font-mono text-[11px]">
-                                    /robots.txt ↗
-                                </a>
-                            </div>
-
-                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                                <div class="text-[11px] text-slate-500 font-semibold">Sitemap 纳管</div>
-                                <span class="text-slate-300 font-mono text-[11px]">{% if url.is_orphan() %}⚡ 孤岛资产{% else %}✓ 已在 Sitemap 中{% endif %}</span>
-                            </div>
-
-                            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                                <div class="text-[11px] text-slate-500 font-semibold">出站 Follow 策略</div>
-                                <span class="{% if url.has_nofollow %}text-amber-400{% else %}text-slate-300{% endif %} font-mono text-[11px]">
-                                    {% if url.has_nofollow %}包含 nofollow{% else %}标准 Follow{% endif %}
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- AI 爬虫拦截探测 (GEO 特性，超越 Ahrefs) -->
-                        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-semibold text-slate-300 flex items-center gap-1.5">
-                                    <span>🤖</span> <span>AI 搜索引擎爬虫策略嗅探 (GEO Directives)</span>
-                                </span>
-                                <span class="text-[10px] text-slate-500 font-mono">IndexFlow 独家特性</span>
-                            </div>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                                <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                                    <div class="text-[10px] text-slate-500">GPTBot</div>
-                                    <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("GPTBot") %}text-rose-400{% else %}text-emerald-400{% endif %}">
-                                        {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("GPTBot") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
-                                    </div>
-                                </div>
-                                <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                                    <div class="text-[10px] text-slate-500">Perplexity</div>
-                                    <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Perplexity") %}text-rose-400{% else %}text-emerald-400{% endif %}">
-                                        {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Perplexity") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
-                                    </div>
-                                </div>
-                                <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                                    <div class="text-[10px] text-slate-500">ClaudeBot</div>
-                                    <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Claude") %}text-rose-400{% else %}text-emerald-400{% endif %}">
-                                        {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Claude") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
-                                    </div>
-                                </div>
-                                <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                                    <div class="text-[10px] text-slate-500">Google-Ext</div>
-                                    <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Google-Extended") %}text-rose-400{% else %}text-emerald-400{% endif %}">
-                                        {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Google-Extended") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 【Ahrefs 模块 3】：结构化数据 (JSON-LD) -->
-                <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🧬</span>
-                            <h4 class="font-bold text-white text-xs uppercase tracking-wider">结构化数据 (JSON-LD)</h4>
-                        </div>
-                        <a href="https://search.google.com/test/rich-results?url={{ url.url }}" target="_blank" rel="noopener noreferrer" 
-                           class="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1">
-                            <span>Google 富媒体验证</span>
-                            <span>↗</span>
-                        </a>
-                    </div>
-
-                    <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
-                        {% if let Some(types) = url.schema_types %}
-                        <div class="space-y-2">
-                            <span class="text-emerald-400 font-bold flex items-center gap-1.5">
-                                <span>✓</span> <span>已识别 Schema 实体类型:</span>
-                            </span>
-                            <div class="flex flex-wrap gap-1.5">
-                                {% for item in types.split(",") %}
-                                <span class="px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono text-xs font-semibold">
-                                    @type: {{ item }}
-                                </span>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="flex items-center gap-2 text-slate-400 py-1">
-                            <span class="text-amber-400">ℹ️</span>
-                            <span>未发现 JSON-LD 结构化数据 (建议配置 Article / WebPage 增强搜索展示)</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </section>
-
-                <!-- 【Ahrefs 模块 4】：社交标签 (Social Tags: OpenGraph & Twitter) -->
-                <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">📱</span>
-                            <h4 class="font-bold text-white text-xs uppercase tracking-wider">社交标签 (Social Tags)</h4>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <!-- Open Graph -->
-                        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-slate-200">Open Graph (og:*)</span>
-                                {% if url.has_opengraph %}
-                                <span class="text-emerald-400 font-semibold">✓ 已配置</span>
-                                {% else %}
-                                <span class="text-amber-400 font-semibold">⚠️ 缺失或不完整</span>
-                                {% endif %}
-                            </div>
-                            <div class="text-[11px] text-slate-400 space-y-1">
-                                <div class="flex justify-between"><span>og:title</span><span class="font-mono text-slate-300">{% if url.has_opengraph %}✓ 已声明{% else %}<span class="text-amber-400">缺失</span>{% endif %}</span></div>
-                                <div class="flex justify-between"><span>og:image</span><span class="font-mono text-slate-300">{% if url.has_opengraph %}✓ 已声明{% else %}<span class="text-amber-400">缺失</span>{% endif %}</span></div>
-                                <div class="flex justify-between"><span>og:type</span><span class="font-mono text-slate-300">{% if url.has_opengraph %}✓ 已声明{% else %}<span class="text-amber-400">缺失</span>{% endif %}</span></div>
-                            </div>
-                        </div>
-
-                        <!-- Twitter Card -->
-                        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-slate-200">X (Twitter) 卡片</span>
-                                {% if url.has_twitter_card %}
-                                <span class="text-emerald-400 font-semibold">✓ 已配置</span>
-                                {% else %}
-                                <span class="text-amber-400 font-semibold">⚠️ 缺失或不完整</span>
-                                {% endif %}
-                            </div>
-                            <div class="text-[11px] text-slate-400 space-y-1">
-                                <div class="flex justify-between"><span>twitter:card</span><span class="font-mono text-slate-300">{% if url.has_twitter_card %}✓ 已声明{% else %}<span class="text-amber-400">缺失</span>{% endif %}</span></div>
-                                <div class="flex justify-between"><span>twitter:title</span><span class="font-mono text-slate-300">{% if url.has_twitter_card %}✓ 已声明{% else %}<span class="text-amber-400">缺失</span>{% endif %}</span></div>
-                                <div class="flex justify-between"><span>twitter:image</span><span class="font-mono text-slate-300">{% if url.has_twitter_card %}✓ 已声明{% else %}<span class="text-amber-400">缺失</span>{% endif %}</span></div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- 【Ahrefs 模块 5】：双引擎真实官方收录档案 (超越 Ahrefs 插件的核心能力) -->
-                <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🔍</span>
-                            <h4 class="font-bold text-white text-xs uppercase tracking-wider">官方双向收录档案 (Official Indexing)</h4>
-                        </div>
-                        <span class="text-[10px] text-slate-500 font-mono">GSC & Bing Webmaster 官方 API</span>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <!-- Google -->
-                        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white">Google GSC</span>
-                                {% if url.is_gsc_indexed() %}
-                                <span class="text-emerald-400 font-bold">✓ 已编入索引</span>
-                                {% else if url.gsc_index_status == "UNKNOWN" %}
-                                <span class="text-slate-500 font-mono">? 尚未检测</span>
-                                {% else %}
-                                <span class="text-rose-400 font-bold">✗ 未收录</span>
-                                {% endif %}
-                            </div>
-                            <div class="text-[11px] text-slate-400 truncate">
-                                明细: {{ url.gsc_coverage_state.as_deref().unwrap_or("暂无记录") }}
-                            </div>
-                            <div class="text-[10px] text-slate-500 font-mono">
-                                爬取时间: {% if let Some(t) = url.gsc_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
-                            </div>
-                        </div>
-
-                        <!-- Bing -->
-                        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-bold text-white">Bing Webmaster</span>
-                                {% if url.is_bing_indexed() %}
-                                <span class="text-sky-400 font-bold">✓ Bing 已收录</span>
-                                {% else if url.bing_index_status == "UNKNOWN" %}
-                                <span class="text-slate-500 font-mono">? 尚未检测</span>
-                                {% else %}
-                                <span class="text-rose-400 font-bold">✗ 未收录</span>
-                                {% endif %}
-                            </div>
-                            <div class="text-[11px] text-slate-400 truncate">
-                                明细: {{ url.bing_coverage_state.as_deref().unwrap_or("暂无记录") }}
-                            </div>
-                            <div class="text-[10px] text-slate-500 font-mono">
-                                爬取时间: {% if let Some(t) = url.bing_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
+                {% include "partials/seo_audit_cards.html" %}
             </div>
 
-            <!-- 3. 抽屉底部操作栏 -->
+            <!-- 底部操作按钮 -->
             <div class="px-6 py-4 border-t border-slate-800 bg-slate-950/90 backdrop-blur flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
                 <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" 
                    class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition font-medium flex items-center gap-1.5 border border-slate-700">
@@ -364,7 +53,6 @@
                             class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700 cursor-pointer">
                         <span>🛡️</span> 重新质检
                     </button>
-
                     <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=bing"
                             hx-target="#url-drawer-root"
                             hx-swap="outerHTML"
@@ -372,7 +60,6 @@
                             class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700 cursor-pointer">
                         <span>⚡</span> Bing 探测
                     </button>
-
                     <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=google"
                             hx-target="#url-drawer-root"
                             hx-swap="outerHTML"
@@ -380,7 +67,6 @@
                             class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700 cursor-pointer">
                         <span>🔍</span> GSC 探测
                     </button>
-
                     <button hx-post="/api/v1/urls/{{ url.id }}/submit?provider=bing"
                             hx-target="#url-drawer-root"
                             hx-swap="outerHTML"
@@ -388,7 +74,6 @@
                             class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold transition active:scale-95 shadow-md shadow-sky-600/20 cursor-pointer">
                         <span>⚡</span> 提交 Bing
                     </button>
-
                     <button hx-post="/api/v1/urls/{{ url.id }}/submit?provider=google"
                             hx-target="#url-drawer-root"
                             hx-swap="outerHTML"
