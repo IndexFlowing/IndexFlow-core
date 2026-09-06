@@ -6,6 +6,7 @@ description = "Open Core Search Index Infrastructure"
 authors = ["IndexFlow Team"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/IndexFlowing/IndexFlow-core"
+documentation = "https://docs.rs/indexflow-seo"
 homepage = "https://www.indexflowing.com"
 readme = "README.md"
 keywords = ["seo", "sitemap", "search", "indexing", "web"]
