@@ -1,8 +1,10 @@
+// src/api/routes.rs
 use super::handlers::{
     auth::{handle_login, handle_setup, render_login, render_setup},
     dashboard::{
         api_get_stats, render_dashboard, render_partial_recent_urls, render_partial_stats,
     },
+    extension::action_extension_inspect, // 核心新增
     health_check,
     indexing::render_indexing,
     monitoring::{
@@ -23,13 +25,26 @@ use super::handlers::{
     AppState,
 };
 use axum::{
+    http::{header, Method},
     routing::{get, post},
     Router,
 };
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 pub fn build_router(state: AppState) -> Router {
+    // 1. 配置标准 CORS 跨域层（允许浏览器扩展带 X-IndexFlow-Key 预检跨域请求）
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("x-indexflow-key"),
+        ]);
+
+    // 2. 网页页面路由
     let web_pages = Router::new()
         .route("/", get(render_dashboard))
         .route("/sitemap", get(render_sitemap))
@@ -52,8 +67,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/partials/url-detail/:id", get(render_url_detail_modal));
 
+    // 3. API 路由
     let api_routes = Router::new()
         .route("/stats", get(api_get_stats))
+        .route("/extension/inspect", post(action_extension_inspect)) // 核心新增：插件专属 API
         .route("/pipeline/:stage/start", post(action_pipeline_start))
         .route("/pipeline/:stage/stop", post(action_pipeline_stop))
         .route("/pipeline/:stage/sync", post(action_pipeline_sync))
@@ -77,6 +94,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/v1", api_routes)
         .nest_service("/static", ServeDir::new("static"))
         .route("/health", get(health_check))
+        .layer(cors) // 挂载 CORS 中间件
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

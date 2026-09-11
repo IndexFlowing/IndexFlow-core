@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod dashboard;
+pub mod extension;
 pub mod indexing;
 pub mod monitoring;
 pub mod pipeline;
