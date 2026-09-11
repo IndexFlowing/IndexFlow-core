@@ -1,3 +1,4 @@
+<!-- File: templates/partials/url_detail_modal.html -->
 <!-- 诊断抽屉容器 -->
 <div id="url-drawer-root" class="fixed inset-0 z-50 overflow-hidden font-sans">
     <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-300 ease-out" 
@@ -33,55 +34,34 @@
                         class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition text-lg shrink-0">✕</button>
             </div>
 
-            <!-- 主内容区：直接复用 5 大诊断卡片组件 -->
+            <!-- 主内容区：复用 5 大核心诊断卡片组件 -->
             <div class="flex-1 overflow-y-auto p-6 space-y-6 text-slate-200 text-xs">
                 {% include "partials/seo_audit_cards.html" %}
             </div>
 
-            <!-- 底部操作按钮 -->
-            <div class="px-6 py-4 border-t border-slate-800 bg-slate-950/90 backdrop-blur flex flex-wrap items-center justify-between gap-2.5 text-xs shrink-0">
-                <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" 
-                   class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition font-medium flex items-center gap-1.5 border border-slate-700">
-                    <span>↗</span> 访问原网页
-                </a>
-
+            <!-- 底部操作栏：遵循模块单一职责（SRP）原则，去除无关操作 -->
+            <div class="px-6 py-4 border-t border-slate-800 bg-slate-950/90 backdrop-blur flex items-center justify-between gap-3 text-xs shrink-0">
                 <div class="flex items-center gap-2">
-                    <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=seo"
-                            hx-target="#url-drawer-root"
-                            hx-swap="outerHTML"
-                            hx-on::after-request="showToast('已完成该 URL 重新质检！')"
-                            class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700 cursor-pointer">
-                        <span>🛡️</span> 重新质检
-                    </button>
-                    <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=bing"
-                            hx-target="#url-drawer-root"
-                            hx-swap="outerHTML"
-                            hx-on::after-request="showToast('Bing 官方收录查询完成！')"
-                            class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700 cursor-pointer">
-                        <span>⚡</span> Bing 探测
-                    </button>
-                    <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=google"
-                            hx-target="#url-drawer-root"
-                            hx-swap="outerHTML"
-                            hx-on::after-request="showToast('GSC 实时收录查询完成！')"
-                            class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold transition active:scale-95 flex items-center gap-1.5 border border-slate-700 cursor-pointer">
-                        <span>🔍</span> GSC 探测
-                    </button>
-                    <button hx-post="/api/v1/urls/{{ url.id }}/submit?provider=bing"
-                            hx-target="#url-drawer-root"
-                            hx-swap="outerHTML"
-                            hx-on::after-request="showToast('已推送到 Bing IndexNow！')"
-                            class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold transition active:scale-95 shadow-md shadow-sky-600/20 cursor-pointer">
-                        <span>⚡</span> 提交 Bing
-                    </button>
-                    <button hx-post="/api/v1/urls/{{ url.id }}/submit?provider=google"
-                            hx-target="#url-drawer-root"
-                            hx-swap="outerHTML"
-                            hx-on::after-request="showToast('已推送到 Google Indexing API！')"
-                            class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition active:scale-95 shadow-md shadow-emerald-600/20 cursor-pointer">
-                        <span>🚀</span> 提交 Google
-                    </button>
+                    <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" 
+                       class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition font-medium flex items-center gap-1.5 border border-slate-700">
+                        <span>↗</span> 访问原网页
+                    </a>
+                    <a href="/seo/detail/{{ url.id }}" target="_blank" rel="noopener noreferrer" 
+                       class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition font-medium flex items-center gap-1.5 border border-slate-700">
+                        <span>⛶</span> 全屏独立报告
+                    </a>
                 </div>
+
+                <!-- 模块 2 唯一核心动作：重新质检该网页（带即时视觉反馈） -->
+                <button hx-post="/api/v1/urls/{{ url.id }}/inspect?engine=seo"
+                        hx-target="#url-drawer-root"
+                        hx-swap="outerHTML"
+                        hx-disabled-elt="this"
+                        hx-on::before-request="this.innerHTML = '<span>⏳</span> <span>正在执行门禁质检...</span>'"
+                        hx-on::after-request="showToast('✅ 页面 SEO 重新质检完成！')"
+                        class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition active:scale-95 flex items-center gap-2 shadow-lg shadow-amber-950/40 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span>🛡️</span> <span>重新质检该网页</span>
+                </button>
             </div>
 
         </div>

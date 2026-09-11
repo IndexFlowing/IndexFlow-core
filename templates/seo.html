@@ -84,6 +84,10 @@
             })
             .then(html => {
                 container.innerHTML = html;
+                // 【核心修复】：通知 HTMX 扫描并激活新插入的 DOM 节点与 hx-* 属性
+                if (window.htmx) {
+                    htmx.process(container);
+                }
             })
             .catch(err => {
                 showToast('加载详情失败: ' + err.message, true);

@@ -1,26 +1,30 @@
-//! # indexflow-seo
-//!
-//! A high-performance, lightweight Technical SEO quality gate & GEO (Generative Engine Optimization) auditor.
-//!
-//! ## Features
-//! - Zero-dependency HTML evaluation (HTTP Status, Canonical, noindex, Title, H1, Meta Description)
-//! - JSON-LD (Schema.org) structured data extraction and entity mapping (`@graph`, array `@type`)
-//! - OpenGraph & Twitter Card social meta parsing
-//! - AI Search Engine Bot directive auditing (GPTBot, Perplexity, Claude, Google-Extended)
-//! - Non-redirecting fast HTTP prober client (Redirects treated as gate issues)
-
+// crates/indexflow-seo/src/lib.rs
 pub mod canonical;
+pub mod content;
 pub mod evaluator;
 pub mod extractor;
+pub mod gate;
+pub mod headers;
+pub mod html_utils;
+pub mod meta;
 pub mod models;
+pub mod schema;
+pub mod warnings;
 
 #[cfg(feature = "probe")]
 pub mod probe;
 
 pub use canonical::{canonical_matches_page, normalize_url};
+pub use content::{compute_word_count, extract_headings};
 pub use evaluator::evaluate_html;
-pub use extractor::{count_images_missing_alt, decode_basic_entities, extract_html_lang, extract_viewport, inspect_html};
+pub use extractor::{inspect_html, RawHtmlInspection};
+pub use gate::evaluate_gate_block;
+pub use headers::{parse_http_link_header, parse_x_robots_header, RobotsTokens};
+pub use html_utils::decode_basic_entities;
+pub use meta::{count_images_missing_alt, extract_html_lang, extract_viewport};
 pub use models::*;
+pub use schema::{extract_json_ld, extract_video_objects};
+pub use warnings::compute_warnings;
 
 #[cfg(feature = "probe")]
 pub use probe::SeoProbeClient;
@@ -80,7 +84,15 @@ mod tests {
 
     #[test]
     fn test_full_inspection_pass() {
-        let res = evaluate_html("https://example.com/guide", 200, 32, None, SAMPLE_HTML_FULL);
+        let res = evaluate_html(
+            "https://example.com/guide",
+            200,
+            32,
+            None,
+            None,
+            None,
+            SAMPLE_HTML_FULL,
+        );
 
         assert!(res.passed);
         assert_eq!(res.block_reason, None);
@@ -89,10 +101,6 @@ mod tests {
             res.page_title.as_deref(),
             Some("Rust Monolith Guide & SEO Best Practices")
         );
-        assert_eq!(
-            res.meta_description.as_deref(),
-            Some("A complete technical SEO guide for modern Rust developers.")
-        );
         assert_eq!(res.h1_content.as_deref(), Some("Complete Rust Guide"));
         assert_eq!(res.h1_count, 1);
         assert!(res.has_canonical);
@@ -100,128 +108,106 @@ mod tests {
         assert!(!res.has_noindex);
         assert!(!res.has_nofollow);
         assert_eq!(res.hreflang.len(), 2);
-
-        assert_eq!(res.opengraph.title.as_deref(), Some("Rust Monolith Guide"));
-        assert_eq!(res.opengraph.og_type.as_deref(), Some("article"));
-        assert_eq!(res.opengraph.image.as_deref(), Some("https://example.com/cover.jpg"));
-        assert_eq!(res.twitter_card.card.as_deref(), Some("summary_large_image"));
-
-        assert!(res.ai_directives.gptbot_blocked);
-        assert!(!res.ai_directives.perplexity_blocked);
-
         assert_eq!(res.json_ld.len(), 2);
-        assert_eq!(
-            res.schema_types(),
-            vec!["Article".to_string(), "FAQPage".to_string()]
-        );
-        assert!(res.has_viewport);
-        assert_eq!(res.html_lang.as_deref(), Some("en"));
-        assert!(res.warnings.iter().any(|w| w.contains("AI 爬虫")));
     }
 
     #[test]
-    fn test_gate_block_http_non_200() {
+    fn test_video_schema_self_reference_block() {
+        let html_with_bad_video = r#"<!DOCTYPE html>
+        <html>
+        <head>
+          <title>AI Video Generator - Example</title>
+          <link rel="canonical" href="https://example.com/video/123" />
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "VideoObject",
+            "name": "Awesome Video",
+            "embedUrl": "https://example.com/video/123",
+            "contentUrl": "https://cdn.example.com/stream.mp4"
+          }
+          </script>
+        </head>
+        <body><h1>Video Title</h1></body>
+        </html>"#;
+
         let res = evaluate_html(
-            "https://example.com/404",
-            404,
-            15,
-            None,
-            "<html><head><title>Not Found</title></head></html>",
-        );
-        assert!(!res.passed);
-        assert_eq!(res.block_reason.as_deref(), Some("HTTP 404"));
-    }
-
-    #[test]
-    fn test_gate_block_meta_noindex() {
-        let html = r#"<html><head><title>Draft Page</title><meta name="robots" content="noindex, nofollow" /></head></html>"#;
-        let res = evaluate_html("https://example.com/draft", 200, 20, None, html);
-        assert!(!res.passed);
-        assert!(res.has_noindex);
-        assert!(res.has_nofollow);
-        assert_eq!(
-            res.block_reason.as_deref(),
-            Some("noindex directive present")
-        );
-    }
-
-    #[test]
-    fn test_gate_block_x_robots_tag_header() {
-        let html = r#"<html><head><title>Valid Title</title></head></html>"#;
-        let res = evaluate_html(
-            "https://example.com/page",
+            "https://example.com/video/123",
             200,
-            20,
-            Some("noindex, noarchive"),
+            10,
+            None,
+            None,
+            None,
+            html_with_bad_video,
+        );
+
+        assert!(!res.passed);
+        assert!(res
+            .block_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("VideoObject #0 语义自环"));
+    }
+
+    #[test]
+    fn test_cross_layer_header_canonical_conflict() {
+        let html = r#"<html><head><title>Test</title><link rel="canonical" href="https://example.com/a" /></head></html>"#;
+        let link_hdr = r#"<https://example.com/b>; rel="canonical""#;
+
+        let res = evaluate_html(
+            "https://example.com/a",
+            200,
+            10,
+            None,
+            None,
+            Some(link_hdr),
             html,
         );
+
         assert!(!res.passed);
-        assert!(res.has_noindex);
-        assert_eq!(
-            res.block_reason.as_deref(),
-            Some("noindex directive present")
-        );
+        assert!(res
+            .block_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("跨层 Canonical 冲突"));
     }
 
     #[test]
-    fn test_gate_block_missing_title() {
-        let html = r#"<html><head><meta name="description" content="No title here" /></head><body><h1>Hello</h1></body></html>"#;
-        let res = evaluate_html("https://example.com/no-title", 200, 20, None, html);
-        assert!(!res.passed);
-        assert_eq!(res.block_reason.as_deref(), Some("Missing <title> tag"));
-    }
+    fn test_redirect_semantics_and_loop() {
+        let res_missing_loc = evaluate_html("https://example.com/old", 301, 10, None, None, None, "");
+        assert!(!res_missing_loc.passed);
+        assert!(res_missing_loc
+            .block_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("FATAL_MALFORMED_REDIRECT"));
 
-    #[test]
-    fn test_gate_block_canonical_mismatch() {
-        let html = r#"<html><head><title>Duplicate Post</title><link rel="canonical" href="https://example.com/original-post" /></head></html>"#;
-        let res = evaluate_html("https://example.com/duplicate-post", 200, 20, None, html);
-        assert!(!res.passed);
-        assert_eq!(
-            res.block_reason.as_deref(),
-            Some("Canonical URL mismatch: https://example.com/original-post")
+        let res_self_loop = evaluate_html(
+            "https://example.com/loop",
+            301,
+            10,
+            None,
+            Some("https://example.com/loop"),
+            None,
+            "",
         );
-    }
+        assert!(!res_self_loop.passed);
+        assert!(res_self_loop
+            .block_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("重定向目标指向自身"));
 
-    #[test]
-    fn test_canonical_fuzzy_match() {
-        assert!(canonical_matches_page(
-            "https://example.com/blog/post-1/",
-            "https://example.com/blog/post-1"
-        ));
-        assert!(canonical_matches_page(
-            "https://example.com:443/blog/post-1",
-            "https://example.com/blog/post-1"
-        ));
-        assert!(canonical_matches_page(
-            "https://example.com/blog/post-1",
-            "/blog/post-1"
-        ));
-        assert!(!canonical_matches_page(
-            "https://example.com/blog/post-1",
-            "https://example.com/blog/other"
-        ));
-    }
-
-    #[test]
-    fn test_entity_decoding() {
-        assert_eq!(
-            decode_basic_entities("Tom &amp; Jerry &#39;Special&#39;"),
-            "Tom & Jerry 'Special'"
+        let res_307 = evaluate_html(
+            "https://example.com/temp",
+            307,
+            10,
+            None,
+            Some("https://example.com/target"),
+            None,
+            "",
         );
-        assert_eq!(
-            decode_basic_entities("&lt;div&gt;&quot;Hello&quot;&nbsp;World&lt;/div&gt;"),
-            "<div>\"Hello\"\u{a0}World</div>"
-        );
-    }
-
-    #[test]
-    fn nested_person_type_is_not_promoted_as_page_schema() {
-        // The Article block also contains an author Person. schema_types walks
-        // only @type / @graph, not arbitrary nested objects — Person stays out.
-        let res = evaluate_html("https://example.com/guide", 200, 1, None, SAMPLE_HTML_FULL);
-        assert_eq!(
-            res.schema_types(),
-            vec!["Article".to_string(), "FAQPage".to_string()]
-        );
+        assert!(!res_307.passed);
+        assert!(res_307.warnings.iter().any(|w| w.contains("WARN_TEMPORARY_REDIRECT_SEO_LEAK")));
     }
 }

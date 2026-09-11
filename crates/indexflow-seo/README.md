@@ -13,9 +13,12 @@
 ## Key Features
 
 - 🛡️ **Technical SEO Gatekeeper**: Pre-flight validation for HTTP status codes, Canonical declaration equivalence, `noindex`/`nofollow` robots directives, `<title>` tags, and `<h1>` headings.
+- 🔗 **Cross-Layer Conflict Auditing**: Detects fatal discrepancies between RFC 5988 HTTP `Link: <...>; rel="canonical"` headers (often injected by CDN/Edge middleware) and HTML `<link rel="canonical">` body declarations.
+- 🔀 **Strict Redirect Semantics**: Surfaces unmasked first-hop redirect codes; flags `302/307` temporary redirects that leak PageRank link equity, catches missing `Location` headers, and blocks redirect loops before wasting search engine crawl quota.
+- 🎥 **VideoObject Semantic Integrity**: Audits Schema.org `VideoObject` structures to assert `embedUrl` and `contentUrl` do not mistakenly self-reference the host HTML page — preventing Googlebot video transcoders from crashing with `"Cannot process video"`.
 - 🤖 **GEO & AI Bot Auditing**: Audits crawler exclusion directives for `GPTBot` / `ChatGPT-User`, `PerplexityBot`, `ClaudeBot` / `anthropic-ai`, and `Google-Extended` — including per-bot `X-Robots-Tag` headers and `none` / `noai`.
 - 📑 **Schema.org Structured Data**: Extracts `application/ld+json` blocks, expands `@graph` and top-level arrays, and maps `@type` (string or array).
-- 🌐 **Social & Multilingual Metadata**: Parses OpenGraph, Twitter Card tags, and `link rel="alternate" hreflang` arrays.
+- 🌐 **Social & Multilingual Metadata**: Parses OpenGraph (including `og:video` and `og:type` consistency checks), Twitter Card tags, and `link rel="alternate" hreflang` arrays.
 - ⚡ **Pure In-Memory Evaluation**: Char-boundary-safe HTML scanner (CJK / emoji never panic). Quote-aware tags, unquoted attributes, multiline meta, HTML comments and `<script>`/`<style>` skipped for visible tags.
 - 🚀 **Optional Non-Redirecting Prober**: Lightweight async HTTP client that treats 3xx redirects as actionable gate issues, with a 5 MiB body cap.
 
@@ -27,7 +30,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-indexflow-seo = "0.1.2"
+indexflow-seo = "0.1.4"
 ```
 
 ### Feature Flags
@@ -72,7 +75,15 @@ fn main() {
     </body>
     </html>"#;
 
-    let result = evaluate_html(page_url, 200, 25, None, html);
+    let result = evaluate_html(
+        page_url,
+        200,    // HTTP status code
+        25,     // Elapsed time (ms)
+        None,   // Optional X-Robots-Tag header
+        None,   // Optional Location header
+        None,   // Optional Link header
+        html,
+    );
 
     if result.passed {
         println!("✅ SEO Gate: PASSED");
@@ -100,9 +111,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let result = prober.check_url("https://www.example.com").await;
 
-    println!("Gate Result: passed={}, reason={:?}", result.passed, result.block_reason);
-    println!("Response Time: {:?} ms", result.response_time_ms);
+    println!("Gate Result   : passed={}, reason={:?}", result.passed, result.block_reason);
+    println!("Response Time : {:?} ms", result.response_time_ms);
     println!("GPTBot Blocked: {}", result.ai_directives.gptbot_blocked);
+    println!("Warnings ({})  : {:?}", result.warnings.len(), result.warnings);
 
     Ok(())
 }
@@ -114,14 +126,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `indexflow-seo` enforces the following pre-flight checks before approving a URL for search engine submission:
 
-1. **HTTP Status**: Must strictly return `200 OK`.
-2. **Robots Directives**: Neither `<meta name="robots" content="noindex">` (or `none`) nor `X-Robots-Tag: noindex` may be present.
-3. **Canonical Normalization**: Declared `<link rel="canonical">` must match the page URL. Handles relative and protocol-relative paths, `.` / `..` segments, default ports 80/443, trailing slashes, scheme/host case, query-parameter order, and percent-encoding. Path case is preserved (case-sensitive).
-4. **Title Tag**: Must contain a valid, non-empty `<title>` element.
+1. **HTTP Status**: Must strictly return `200 OK`. 3xx redirects require valid `Location` headers, must not self-loop, and are blocked from direct engine submission to avoid wasting quota.
+2. **Cross-Layer Canonical Equivalence**: Declared HTTP `Link: <...>; rel="canonical"` headers must match HTML Body `<link rel="canonical">` targets to prevent crawling deadlocks.
+3. **Robots Directives**: Neither `<meta name="robots" content="noindex">` (or `none`) nor `X-Robots-Tag: noindex` may be present.
+4. **Canonical Normalization**: Declared canonical URLs must match the page URL. Handles relative/protocol-relative paths, `.` / `..` segments, default ports (80/443), trailing slashes, scheme/host casing, query parameter ordering, and percent-encoding.
+5. **VideoObject Self-Loop Assertion**: Schema.org `VideoObject.embedUrl` and `contentUrl` must not resolve to the host HTML page URL.
+6. **Title Tag**: Must contain a valid, non-empty `<title>` element.
 
 ---
 
 ## Changelog
+
+### 0.1.4
+
+- **Architectural Refactor**: Decoupled `evaluator.rs` and `extractor.rs` into single-responsibility functional modules (`html_utils`, `content`, `schema`, `meta`, `headers`, `gate`, `warnings`) without nested directory boilerplate.
+- **Cross-Layer Conflict Audit**: Added RFC 5988 HTTP `Link` header parsing and cross-checked against HTML canonical/hreflang tags.
+- **VideoObject Semantic Verification**: Added deep `VideoObject` entity extraction with self-reference prevention (`embedUrl` / `contentUrl` vs host page) and media stream extension checks (`.mp4`, `.m3u8`, etc.).
+- **Redirect Semantics Enforcement**: Non-following HTTP probe now flags `302/307` temporary redirects that leak PageRank link equity, catches missing `Location` headers, and blocks redirect loops.
+- **Social Tag Consistency**: Added `og:video` extraction and mismatch warnings when `og:type` is declared as `video.*` without accompanying media.
 
 ### 0.1.2
 

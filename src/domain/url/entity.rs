@@ -92,6 +92,11 @@ impl Url {
         self.seo_warnings_list().len()
     }
 
+    /// 当前 URL 存在的所有问题总数（门禁拦截阻断项 + 软性优化建议）
+    pub fn total_issue_count(&self) -> usize {
+        self.warning_count() + usize::from(self.seo_issue.is_some())
+    }
+
     /// 获取第一条关键警告（用于列表摘要展示）
     pub fn primary_warning(&self) -> Option<&str> {
         self.seo_warnings_list().first().copied()

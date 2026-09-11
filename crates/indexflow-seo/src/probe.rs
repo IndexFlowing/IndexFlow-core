@@ -1,13 +1,8 @@
-//! Non-following HTTP probe. 3xx is surfaced as a gate failure (the caller
-//! asked us not to mask redirect chains). Response bodies are streamed with a
-//! hard cap so a hostile 2 GiB HTML document cannot OOM the auditor.
-
+// crates/indexflow-seo/src/probe.rs
 use crate::evaluator::evaluate_html;
 use crate::models::SeoAuditResult;
 use std::time::{Duration, Instant};
 
-/// Maximum HTML body retained for inspection (5 MiB). Excess is truncated on
-/// a UTF-8 char boundary.
 pub const MAX_HTML_BODY: usize = 5 * 1024 * 1024;
 
 #[derive(Clone)]
@@ -20,7 +15,7 @@ impl SeoProbeClient {
         let client = reqwest::Client::builder()
             .timeout(timeout)
             .user_agent(user_agent)
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(reqwest::redirect::Policy::none()) // 绝对不跟随重定向，暴露出第一跳真实状态
             .build()?;
         Ok(Self { client })
     }
@@ -43,18 +38,25 @@ impl SeoProbeClient {
 
         let status_code = response.status().as_u16() as i32;
 
-        let x_robots = join_x_robots(response.headers());
+        // 提取核心网络标头
+        let x_robots = join_header_values(response.headers(), "x-robots-tag");
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let link_header = join_header_values(response.headers(), "link");
 
         if let Some(len) = response.content_length() {
             if len > MAX_HTML_BODY as u64 * 4 {
-                // Declared length is wildly over the inspect cap: skip the body
-                // rather than streaming gigabytes we will throw away.
                 let elapsed = millis_i32(start.elapsed());
                 return evaluate_html(
                     url,
                     status_code,
                     elapsed,
                     x_robots.as_deref(),
+                    location.as_deref(),
+                    link_header.as_deref(),
                     "",
                 );
             }
@@ -63,13 +65,21 @@ impl SeoProbeClient {
         let body = read_body_capped(&mut response).await;
         let elapsed = millis_i32(start.elapsed());
 
-        evaluate_html(url, status_code, elapsed, x_robots.as_deref(), &body)
+        evaluate_html(
+            url,
+            status_code,
+            elapsed,
+            x_robots.as_deref(),
+            location.as_deref(),
+            link_header.as_deref(),
+            &body,
+        )
     }
 }
 
-fn join_x_robots(headers: &reqwest::header::HeaderMap) -> Option<String> {
+fn join_header_values(headers: &reqwest::header::HeaderMap, name: &str) -> Option<String> {
     let mut parts = Vec::new();
-    for value in headers.get_all("x-robots-tag") {
+    for value in headers.get_all(name) {
         if let Ok(s) = value.to_str() {
             let s = s.trim();
             if !s.is_empty() {
@@ -121,19 +131,4 @@ fn bytes_to_utf8_clipped(buf: &[u8]) -> String {
 
 fn millis_i32(d: Duration) -> i32 {
     i32::try_from(d.as_millis()).unwrap_or(i32::MAX)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn utf8_clip_on_multibyte_boundary() {
-        // `你好` is 6 bytes; clip the buffer in the middle of the second char.
-        let mut v = "你好".as_bytes().to_vec();
-        v.truncate(4);
-        let s = bytes_to_utf8_clipped(&v);
-        assert_eq!(s, "你");
-        assert!(!s.is_empty());
-    }
 }

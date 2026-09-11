@@ -1,15 +1,23 @@
-<!-- 诊断问题与建议速报 -->
+<!-- templates/partials/seo_audit_cards.html -->
+
+<!-- 1. 顶部技术 SEO 门禁与建议速报横幅 -->
 {% if !url.seo_warnings_list().is_empty() || url.seo_issue.is_some() %}
-<div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-    <div class="flex items-center justify-between text-amber-300 font-bold">
-        <span class="flex items-center gap-1.5">
-            <span>⚠️</span> <span>技术 SEO 质检与优化建议清单 ({{ url.warning_count() }})</span>
+<div class="p-4 rounded-2xl {% if url.is_seo_fail() %}bg-rose-500/10 border-rose-500/30{% else %}bg-amber-500/10 border-amber-500/30{% endif %} border space-y-2.5">
+    <div class="flex items-center justify-between {% if url.is_seo_fail() %}text-rose-300{% else %}text-amber-300{% endif %} font-bold">
+        <span class="flex items-center gap-2">
+            <span>{% if url.is_seo_fail() %}🛑{% else %}⚠️{% endif %}</span> 
+            <span>技术 SEO 门禁裁决与优化清单 ({{ url.total_issue_count() }} 项)</span>
         </span>
-        <span class="font-mono text-[11px]">HTTP {{ url.http_status.unwrap_or(0) }}</span>
+        <span class="font-mono text-xs px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700">
+            HTTP {{ url.http_status.unwrap_or(0) }}
+        </span>
     </div>
-    <ul class="space-y-1.5 pl-5 list-disc text-amber-200/90 text-xs">
+    
+    <ul class="space-y-1.5 pl-5 list-disc text-xs leading-relaxed {% if url.is_seo_fail() %}text-rose-200/90{% else %}text-amber-200/90{% endif %}">
         {% if let Some(issue) = url.seo_issue %}
-        <li class="font-bold text-rose-400">🛑 门禁拦截：{{ issue }}</li>
+        <li class="font-bold text-rose-400">
+            【门禁拦截 - 阻断推送】{{ issue }}
+        </li>
         {% endif %}
         {% for warning in url.seo_warnings_list() %}
         <li>{{ warning }}</li>
@@ -18,39 +26,39 @@
 </div>
 {% endif %}
 
-<!-- 1. 元信息 (Meta Information) -->
+<!-- 2. 元信息与规范 URL (含 HTTP Header vs HTML 跨层比对) -->
 <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
             <span class="text-base">📑</span>
-            <h4 class="font-bold text-white text-xs uppercase tracking-wider">元信息 (Meta Information)</h4>
+            <h4 class="font-bold text-white text-xs uppercase tracking-wider">元信息与跨层规范化 (Meta & Canonical)</h4>
         </div>
-        <span class="text-slate-500 font-mono text-[11px]">加载耗时: {{ url.response_time_ms.unwrap_or(0) }}ms</span>
+        <span class="text-slate-500 font-mono text-[11px]">首字节与加载: {{ url.response_time_ms.unwrap_or(0) }}ms</span>
     </div>
 
     <div class="space-y-3.5">
-        <!-- 标题 Title -->
+        <!-- 页面标题 Title -->
         <div class="space-y-1">
             <div class="flex items-center justify-between">
-                <span class="font-semibold text-slate-400">标题 (Title)</span>
+                <span class="font-semibold text-slate-400">网页标题 (Title)</span>
                 {% let title_len = url.title_char_count() %}
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold {% if title_len == 0 %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% else if title_len > 60 %}bg-amber-500/10 text-amber-400 border border-amber-500/20{% else %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% endif %}">
                     {{ title_len }} / 60 字符
                 </span>
             </div>
             <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 font-medium">
-                {{ url.page_title.as_deref().unwrap_or("<未配置 Title 标签>") }}
+                {{ url.page_title.as_deref().unwrap_or("<未在 HTML <head> 中配置 Title 标签>") }}
             </div>
         </div>
 
-        <!-- 描述 Description -->
+        <!-- 页面描述 Description -->
         <div class="space-y-1">
             <div class="flex items-center justify-between">
-                <span class="font-semibold text-slate-400">描述 (Meta Description)</span>
+                <span class="font-semibold text-slate-400">页面描述 (Meta Description)</span>
                 {% let desc_len = url.desc_char_count() %}
                 {% if desc_len == 0 %}
                 <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                    <span>⚠️</span> <span>缺失 (Missing)</span>
+                    <span>⚠️</span> <span>缺失</span>
                 </span>
                 {% else %}
                 <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold {% if desc_len >= 50 && desc_len <= 160 %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{% else %}bg-amber-500/10 text-amber-400 border border-amber-500/20{% endif %}">
@@ -59,7 +67,7 @@
                 {% endif %}
             </div>
             <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 leading-relaxed">
-                {{ url.meta_description.as_deref().unwrap_or("<页面未在 HTML <head> 中配置 meta description 描述>") }}
+                {{ url.meta_description.as_deref().unwrap_or("<未配置 meta description 描述>") }}
             </div>
         </div>
 
@@ -68,17 +76,17 @@
             <div class="flex items-center justify-between">
                 <span class="font-semibold text-slate-400">规范 URL (Canonical URL)</span>
                 {% if url.canonical_url.is_some() %}
-                <span class="text-emerald-400 font-semibold flex items-center gap-1">
-                    <span>✓</span> <span>在 HTML 中已声明</span>
+                <span class="text-emerald-400 font-semibold flex items-center gap-1 text-[11px]">
+                    <span>✓</span> <span>已声明并在门禁校验中一致</span>
                 </span>
                 {% else %}
-                <span class="text-rose-400 font-semibold flex items-center gap-1">
-                    <span>🛑</span> <span>缺失 (Missing)</span>
+                <span class="text-rose-400 font-semibold flex items-center gap-1 text-[11px]">
+                    <span>🛑</span> <span>缺失 (可能被搜索引擎判定为重复内容)</span>
                 </span>
                 {% endif %}
             </div>
-            <div class="p-2 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-300 break-all">
-                {{ url.canonical_url.as_deref().unwrap_or("<未在渲染的 HTML 中发现 link rel=canonical>") }}
+            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-300 break-all">
+                {{ url.canonical_url.as_deref().unwrap_or("<未在响应中发现 rel=canonical>") }}
             </div>
         </div>
 
@@ -100,67 +108,67 @@
     </div>
 </section>
 
-<!-- 2. 可索引性与 Robots 指令 -->
+<!-- 3. 可索引性与 AI 搜索引擎爬虫嗅探 (Indexability & GEO) -->
 <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
             <span class="text-base">🚦</span>
-            <h4 class="font-bold text-white text-xs uppercase tracking-wider">可索引性 (Indexability)</h4>
+            <h4 class="font-bold text-white text-xs uppercase tracking-wider">可索引性与 AI 搜索爬虫门禁 (GEO Directives)</h4>
         </div>
-        <span class="text-slate-500 font-mono text-[11px]">HTTP 状态: {{ url.http_status.unwrap_or(0) }}</span>
+        <span class="text-slate-500 font-mono text-[11px]">HTTP {{ url.http_status.unwrap_or(0) }}</span>
     </div>
 
     <div class="space-y-3">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                <div class="text-[11px] text-slate-500 font-semibold">Robots.txt</div>
-                <a href="/robots.txt" target="_blank" class="text-cyan-400 hover:underline block truncate font-mono text-[11px]">
-                    /robots.txt ↗
-                </a>
-            </div>
-
-            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
                 <div class="text-[11px] text-slate-500 font-semibold">Sitemap 纳管</div>
-                <span class="text-slate-300 font-mono text-[11px]">{% if url.is_orphan() %}⚡ 孤岛资产{% else %}✓ 已在 Sitemap 中{% endif %}</span>
+                <span class="text-slate-300 font-mono text-[11px]">{% if url.is_orphan() %}⚡ 孤岛页面 (不在Sitemap){% else %}✓ 已被 Sitemap 纳管{% endif %}</span>
             </div>
 
             <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                <div class="text-[11px] text-slate-500 font-semibold">出站 Follow 策略</div>
+                <div class="text-[11px] text-slate-500 font-semibold">出站链接 Follow 策略</div>
                 <span class="{% if url.has_nofollow %}text-amber-400{% else %}text-slate-300{% endif %} font-mono text-[11px]">
-                    {% if url.has_nofollow %}包含 nofollow{% else %}标准 Follow{% endif %}
+                    {% if url.has_nofollow %}包含 nofollow{% else %}标准 Follow (权重正常传递){% endif %}
+                </span>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                <div class="text-[11px] text-slate-500 font-semibold">图片 Alt 缺失统计</div>
+                <span class="{% if url.images_missing_alt.unwrap_or(0) > 0 %}text-amber-400{% else %}text-emerald-400{% endif %} font-mono text-[11px]">
+                    {{ url.images_missing_alt.unwrap_or(0) }} 张缺失 Alt
                 </span>
             </div>
         </div>
 
-        <!-- AI 爬虫策略嗅探 (GEO) -->
+        <!-- AI 爬虫策略嗅探 -->
         <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
             <div class="flex items-center justify-between">
                 <span class="font-semibold text-slate-300 flex items-center gap-1.5">
-                    <span>🤖</span> <span>AI 搜索引擎爬虫策略嗅探 (GEO Directives)</span>
+                    <span>🤖</span> <span>AI 搜索引擎模型抓取嗅探 (GEO Protocol)</span>
                 </span>
-                <span class="text-[10px] text-cyan-400 font-mono">IndexFlow 核心引擎</span>
+                <span class="text-[10px] text-cyan-400 font-mono">IndexFlow Engine</span>
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                 <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                    <div class="text-[10px] text-slate-500">GPTBot</div>
+                    <div class="text-[10px] text-slate-500">GPTBot (OpenAI)</div>
                     <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("GPTBot") %}text-rose-400{% else %}text-emerald-400{% endif %}">
                         {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("GPTBot") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
                     </div>
                 </div>
                 <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                    <div class="text-[10px] text-slate-500">Perplexity</div>
+                    <div class="text-[10px] text-slate-500">PerplexityBot</div>
                     <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Perplexity") %}text-rose-400{% else %}text-emerald-400{% endif %}">
                         {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Perplexity") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
                     </div>
                 </div>
                 <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                    <div class="text-[10px] text-slate-500">ClaudeBot</div>
+                    <div class="text-[10px] text-slate-500">ClaudeBot (Anthropic)</div>
                     <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Claude") %}text-rose-400{% else %}text-emerald-400{% endif %}">
                         {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Claude") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
                     </div>
                 </div>
                 <div class="p-2 rounded-lg bg-slate-950 border border-slate-800 text-center">
-                    <div class="text-[10px] text-slate-500">Google-Ext</div>
+                    <div class="text-[10px] text-slate-500">Google-Extended</div>
                     <div class="font-bold text-[11px] mt-0.5 {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Google-Extended") %}text-rose-400{% else %}text-emerald-400{% endif %}">
                         {% if url.ai_blocked_bots.as_deref().unwrap_or("").contains("Google-Extended") %}🛑 阻断{% else %}✓ 允许抓取{% endif %}
                     </div>
@@ -170,12 +178,12 @@
     </div>
 </section>
 
-<!-- 3. 结构化数据 (JSON-LD) -->
+<!-- 4. 结构化数据 (JSON-LD) 与富媒体实体 -->
 <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
             <span class="text-base">🧬</span>
-            <h4 class="font-bold text-white text-xs uppercase tracking-wider">结构化数据 (JSON-LD)</h4>
+            <h4 class="font-bold text-white text-xs uppercase tracking-wider">结构化数据与富媒体 (JSON-LD & VideoObject)</h4>
         </div>
         <a href="https://search.google.com/test/rich-results?url={{ url.url }}" target="_blank" rel="noopener noreferrer" 
            class="text-[11px] text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1">
@@ -184,12 +192,12 @@
         </a>
     </div>
 
-    <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+    <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
         {% if let Some(types) = url.schema_types %}
         <div class="space-y-2">
-            <span class="text-emerald-400 font-bold flex items-center gap-1.5">
-                <span>✓</span> <span>已识别 Schema 实体类型:</span>
-            </span>
+            <div class="text-emerald-400 font-bold flex items-center gap-1.5">
+                <span>✓</span> <span>已识别 Schema 实体定义:</span>
+            </div>
             <div class="flex flex-wrap gap-1.5">
                 {% for item in types.split(",") %}
                 <span class="px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono text-xs font-semibold">
@@ -198,21 +206,32 @@
                 {% endfor %}
             </div>
         </div>
+
+        <!-- 针对 VideoObject 的核心提示 -->
+        {% if types.contains("VideoObject") %}
+        <div class="p-2.5 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 text-[11px] flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+                <span>🎥</span> <span>已检测到 VideoObject 视频富媒体对象 (已通过 embedUrl 语义自环审计)</span>
+            </span>
+            <span class="text-emerald-400 font-bold">✓ 自环安全</span>
+        </div>
+        {% endif %}
+
         {% else %}
         <div class="flex items-center gap-2 text-slate-400 py-1">
             <span class="text-amber-400">ℹ️</span>
-            <span>未发现 JSON-LD 结构化数据 (建议配置 Article / WebPage 增强搜索展示)</span>
+            <span>未发现 JSON-LD 结构化数据 (建议配置 Article / WebPage / Product 等增强搜索展示)</span>
         </div>
         {% endif %}
     </div>
 </section>
 
-<!-- 4. 社交标签 (Social Tags) -->
+<!-- 5. 社交标签与多媒体卡片 (OpenGraph & Twitter Card) -->
 <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
             <span class="text-base">📱</span>
-            <h4 class="font-bold text-white text-xs uppercase tracking-wider">社交标签 (Social Tags)</h4>
+            <h4 class="font-bold text-white text-xs uppercase tracking-wider">社交卡片与多媒体声明 (Social Tags)</h4>
         </div>
     </div>
 
@@ -239,7 +258,7 @@
                 {% if url.has_twitter_card %}
                 <span class="text-emerald-400 font-semibold">✓ 已配置</span>
                 {% else %}
-                <span class="text-amber-400 font-semibold">⚠️ 缺失或不完整</span>
+                <span class="text-amber-400 font-semibold">⚠️ 缺失</span>
                 {% endif %}
             </div>
             <div class="text-[11px] text-slate-400 space-y-1">
@@ -251,12 +270,12 @@
     </div>
 </section>
 
-<!-- 5. 双引擎官方真实收录 -->
+<!-- 6. 官方双引擎真实收录档案 -->
 <section class="bg-slate-950/60 border border-slate-800 rounded-2xl p-5 space-y-4">
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2">
             <span class="text-base">🔍</span>
-            <h4 class="font-bold text-white text-xs uppercase tracking-wider">官方双向收录档案 (Official Indexing)</h4>
+            <h4 class="font-bold text-white text-xs uppercase tracking-wider">搜索引擎官方真实收录 (Official Indexing)</h4>
         </div>
         <span class="text-[10px] text-slate-500 font-mono">GSC & Bing Webmaster 官方 API</span>
     </div>
@@ -274,10 +293,10 @@
                 {% endif %}
             </div>
             <div class="text-[11px] text-slate-400 truncate">
-                明细: {{ url.gsc_coverage_state.as_deref().unwrap_or("暂无记录") }}
+                覆盖: {{ url.gsc_coverage_state.as_deref().unwrap_or("暂无记录") }}
             </div>
             <div class="text-[10px] text-slate-500 font-mono">
-                爬取时间: {% if let Some(t) = url.gsc_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
+                最后爬取: {% if let Some(t) = url.gsc_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
             </div>
         </div>
 
@@ -293,10 +312,10 @@
                 {% endif %}
             </div>
             <div class="text-[11px] text-slate-400 truncate">
-                明细: {{ url.bing_coverage_state.as_deref().unwrap_or("暂无记录") }}
+                覆盖: {{ url.bing_coverage_state.as_deref().unwrap_or("暂无记录") }}
             </div>
             <div class="text-[10px] text-slate-500 font-mono">
-                爬取时间: {% if let Some(t) = url.bing_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
+                最后爬取: {% if let Some(t) = url.bing_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
             </div>
         </div>
     </div>

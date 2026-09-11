@@ -1,3 +1,4 @@
+// crates/indexflow-seo/src/models.rs
 use serde::{Deserialize, Serialize};
 
 /// 页面标题大纲层级项 (H1 ~ H6).
@@ -23,6 +24,7 @@ pub struct OpenGraphMeta {
     pub og_type: Option<String>,
     pub url: Option<String>,
     pub site_name: Option<String>,
+    pub video: Option<String>,
 }
 
 /// Twitter Card 标记.
@@ -53,10 +55,18 @@ impl AiBotDirectives {
 
     pub fn blocked_names(&self) -> Vec<&str> {
         let mut names = Vec::new();
-        if self.gptbot_blocked { names.push("GPTBot"); }
-        if self.perplexity_blocked { names.push("PerplexityBot"); }
-        if self.claudebot_blocked { names.push("ClaudeBot"); }
-        if self.google_extended_blocked { names.push("Google-Extended"); }
+        if self.gptbot_blocked {
+            names.push("GPTBot");
+        }
+        if self.perplexity_blocked {
+            names.push("PerplexityBot");
+        }
+        if self.claudebot_blocked {
+            names.push("ClaudeBot");
+        }
+        if self.google_extended_blocked {
+            names.push("Google-Extended");
+        }
         names
     }
 
@@ -73,6 +83,25 @@ impl AiBotDirectives {
 pub struct JsonLdBlock {
     pub schema_type: Option<String>,
     pub raw_json: String,
+}
+
+/// 结构化提取的 VideoObject 实体详情
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct VideoObjectEntity {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub embed_url: Option<String>,
+    pub content_url: Option<String>,
+    pub upload_date: Option<String>,
+}
+
+/// HTTP 标头中声明的 Link: <uri>; rel="..."
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HttpLinkHeader {
+    pub uri: String,
+    pub rel: String,
+    pub hreflang: Option<String>,
 }
 
 /// SEO 质量门禁与技术检查综合结果.
@@ -99,7 +128,11 @@ pub struct SeoAuditResult {
     pub opengraph: OpenGraphMeta,
     pub twitter_card: TwitterCardMeta,
     pub json_ld: Vec<JsonLdBlock>,
+    pub video_objects: Vec<VideoObjectEntity>,
     pub ai_directives: AiBotDirectives,
+
+    pub redirect_location: Option<String>,
+    pub http_links: Vec<HttpLinkHeader>,
 
     pub has_viewport: bool,
     pub html_lang: Option<String>,
