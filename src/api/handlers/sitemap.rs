@@ -60,7 +60,7 @@ pub async fn render_sitemap(
             None,
             None,
             None,
-            false,
+            Some("sitemap"),
             None,
             None,
         )

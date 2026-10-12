@@ -66,7 +66,7 @@ pub async fn render_monitoring_list(
             None,
             None,
             None,
-            false,
+            None,
             None,
             None,
         )

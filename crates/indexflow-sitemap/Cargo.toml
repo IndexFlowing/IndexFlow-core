@@ -1,6 +1,6 @@
 [package]
 name = "indexflow-sitemap"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "High-performance, fault-tolerant Google-compliant Sitemap parser and crawler supporting XML, Gzip, Plain Text, Images, Videos, News, and Hreflang extensions"
 license = "MIT OR Apache-2.0"

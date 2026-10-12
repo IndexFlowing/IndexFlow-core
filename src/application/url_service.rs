@@ -83,7 +83,7 @@ impl UrlService {
         seo_filter: Option<&str>,
         gsc_status_filter: Option<&str>,
         bing_status_filter: Option<&str>,
-        orphan_only: bool,
+        discovered_via: Option<&str>,
         bing_filter: Option<&str>,
         google_filter: Option<&str>,
     ) -> anyhow::Result<(Vec<Url>, i64)> {
@@ -96,7 +96,7 @@ impl UrlService {
                 seo_filter,
                 gsc_status_filter,
                 bing_status_filter,
-                orphan_only,
+                discovered_via,
                 bing_filter,
                 google_filter,
             )
@@ -111,7 +111,7 @@ impl UrlService {
     ) -> anyhow::Result<(Vec<Url>, i64)> {
         self.urls
             .list_filtered(
-                site_id, page, limit, None, None, None, None, false, None, None,
+                site_id, page, limit, None, None, None, None, None, None, None,
             )
             .await
     }

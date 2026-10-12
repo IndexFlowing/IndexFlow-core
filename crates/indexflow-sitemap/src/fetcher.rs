@@ -167,10 +167,29 @@ impl SitemapFetcher {
     }
 
     async fn download_capped(&self, sitemap_url: &str) -> Result<(String, Vec<u8>), SitemapError> {
-        let response = self.client.get(sitemap_url).send().await?;
+        info!(url = %sitemap_url, "🚀 [SitemapFetcher] 发起 HTTP 请求获取 Sitemap 原始内容 (强制 no-cache)...");
+        
+        let response = self
+            .client
+            .get(sitemap_url)
+            .header(reqwest::header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+            .header(reqwest::header::PRAGMA, "no-cache")
+            .send()
+            .await?;
 
         let status = response.status();
+        let headers = response.headers().clone();
+        
+        info!(
+            url = %sitemap_url,
+            status = %status,
+            content_type = ?headers.get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()),
+            content_length = ?headers.get(reqwest::header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()),
+            "📥 [SitemapFetcher] 收到服务器 HTTP 响应标头"
+        );
+
         if !status.is_success() {
+            warn!(url = %sitemap_url, status = %status, "❌ Sitemap HTTP 状态码非 2xx 成功状态");
             return Err(SitemapError::HttpStatus(status.as_u16()));
         }
 
@@ -195,8 +214,6 @@ impl SitemapFetcher {
                 });
             }
             raw.extend_from_slice(&chunk);
-            // A gzip bomb is caught at inflate time; still refuse an uncompressed
-            // body that is already over the Google 50 MiB document cap.
             if raw.len() > MAX_UNCOMPRESSED_BYTES && !is_gzip_magic(&raw) {
                 return Err(SitemapError::PayloadTooLarge {
                     size: raw.len() as u64,
@@ -204,6 +221,15 @@ impl SitemapFetcher {
                 });
             }
         }
+
+        info!(
+            url = %sitemap_url,
+            final_url = %final_url,
+            downloaded_bytes = raw.len(),
+            is_gzip = is_gzip_magic(&raw),
+            "✅ [SitemapFetcher] 原始内容下载完成，准备解压与词法解析"
+        );
+
         Ok((final_url, raw))
     }
 }

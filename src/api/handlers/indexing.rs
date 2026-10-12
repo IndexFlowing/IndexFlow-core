@@ -68,6 +68,8 @@ pub async fn render_indexing(
         .unwrap_or_default();
     let page = q.page.unwrap_or(1).max(1);
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
+    let orphan_only = q.orphan.as_deref() == Some("1") || q.orphan.as_deref() == Some("true");
+    let discovered_via_filter = if orphan_only { Some("gsc_orphan") } else { None };
     let (items, total) = state
         .url_service
         .list_filtered(
@@ -78,7 +80,7 @@ pub async fn render_indexing(
             None,
             q.gsc_status.as_deref(),
             q.bing_status.as_deref(),
-            q.orphan.as_deref() == Some("1") || q.orphan.as_deref() == Some("true"),
+            discovered_via_filter,
             None,
             None,
         )

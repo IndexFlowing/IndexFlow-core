@@ -44,6 +44,7 @@ impl UrlRepo {
                 ON CONFLICT(url_hash) DO UPDATE SET
                     sitemap_lastmod = EXCLUDED.sitemap_lastmod,
                     sitemap_synced_at = CURRENT_TIMESTAMP,
+                    discovered_via = 'sitemap',
                     priority = EXCLUDED.priority,
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING id
@@ -144,5 +145,91 @@ impl UrlRepo {
 
         tx.commit().await?;
         Ok(total_marked)
+    }
+
+    /// 将本次同步中未出现的 Sitemap URL 降级为孤岛状态 (gsc_orphan)
+    /// 既不破坏历史诊断/收录历史，又让 Sitemap 视图精准匹配当前最新版本
+    pub async fn demote_absent_sitemap_urls(
+        &self,
+        site_id: i64,
+        sync_started_at: chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<u64> {
+        let res = sqlx::query(
+            r#"
+            UPDATE urls 
+            SET discovered_via = 'gsc_orphan',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE site_id = $1 
+              AND discovered_via = 'sitemap'
+              AND (sitemap_synced_at IS NULL OR datetime(sitemap_synced_at) < datetime($2))
+            "#,
+        )
+        .bind(site_id)
+        .bind(sync_started_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(res.rows_affected())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::SitemapUrlEntry;
+    use sqlx::SqlitePool;
+
+    #[tokio::test]
+    async fn demote_absent_sitemap_urls_and_revival() -> anyhow::Result<()> {
+        let pool = SqlitePool::connect("sqlite::memory:").await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        let repo = UrlRepo::new(pool);
+
+        let entry1 = SitemapUrlEntry {
+            loc: "https://example.com/keep".into(),
+            lastmod: None,
+            priority: None,
+            locale: "en".into(),
+            path_prefix: "/".into(),
+        };
+        let entry2 = SitemapUrlEntry {
+            loc: "https://example.com/drop".into(),
+            lastmod: None,
+            priority: None,
+            locale: "en".into(),
+            path_prefix: "/".into(),
+        };
+
+        // First batch: both inserted as sitemap
+        repo.batch_upsert_discovered(1, &[entry1.clone(), entry2.clone()]).await?;
+
+        // Simulate time passing: manually set drop's sitemap_synced_at to an older time
+        sqlx::query(
+            "UPDATE urls SET sitemap_synced_at = '2026-01-01 00:00:00' WHERE url = 'https://example.com/drop'"
+        )
+        .execute(&repo.pool)
+        .await?;
+
+        let sync_start = Utc::now();
+
+        // entry1 is refreshed
+        repo.batch_upsert_discovered(1, &[entry1.clone()]).await?;
+
+        // Demote absent URLs
+        let demoted = repo.demote_absent_sitemap_urls(1, sync_start).await?;
+        assert_eq!(demoted, 1);
+
+        let drop_url = repo.find_by_id(2).await?.unwrap();
+        assert_eq!(drop_url.discovered_via, "gsc_orphan");
+
+        let keep_url = repo.find_by_id(1).await?.unwrap();
+        assert_eq!(keep_url.discovered_via, "sitemap");
+
+        // Revival test: drop reappears in sitemap
+        repo.batch_upsert_discovered(1, &[entry2.clone()]).await?;
+        let revived_url = repo.find_by_id(2).await?.unwrap();
+        assert_eq!(revived_url.discovered_via, "sitemap");
+
+        Ok(())
     }
 }

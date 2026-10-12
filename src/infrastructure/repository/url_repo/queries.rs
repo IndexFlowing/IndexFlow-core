@@ -28,7 +28,7 @@ impl UrlRepo {
         ) = sqlx::query_as(
             r#"
             SELECT
-                COUNT(*) AS url_total,
+                COUNT(CASE WHEN discovered_via = 'sitemap' THEN 1 END) AS url_total,
                 COUNT(CASE WHEN gsc_index_status = 'INDEXED' THEN 1 END) AS google_indexed,
                 COUNT(CASE WHEN gsc_index_status = 'CRAWLED_NOT_INDEXED' THEN 1 END) AS google_crawled_not_indexed,
                 COUNT(CASE WHEN gsc_index_status = 'DISCOVERED_NOT_INDEXED' THEN 1 END) AS google_discovered_not_indexed,
@@ -72,7 +72,7 @@ impl UrlRepo {
         })
     }
 
-    /// 支持全维度条件与「孤岛资产」过滤
+    /// 支持全维度条件与发现渠道（如「Sitemap 纳管资产」或「孤岛资产」）过滤
     pub async fn list_filtered(
         &self,
         site_id: i64,
@@ -82,7 +82,7 @@ impl UrlRepo {
         seo_filter: Option<&str>,
         gsc_status_filter: Option<&str>,
         bing_status_filter: Option<&str>,
-        orphan_only: bool,
+        discovered_via: Option<&str>,
         bing_filter: Option<&str>,
         google_filter: Option<&str>,
     ) -> anyhow::Result<(Vec<Url>, i64)> {
@@ -97,7 +97,7 @@ impl UrlRepo {
               AND ($3 IS NULL OR seo_status = $3)
               AND ($4 IS NULL OR gsc_index_status = $4)
               AND ($5 IS NULL OR bing_index_status = $5)
-              AND (NOT $6 OR discovered_via = 'gsc_orphan')
+              AND ($6 IS NULL OR discovered_via = $6)
               AND ($7 IS NULL OR bing_status = $7)
               AND ($8 IS NULL OR google_status = $8)
             "#,
@@ -107,7 +107,7 @@ impl UrlRepo {
         .bind(seo_filter)
         .bind(gsc_status_filter)
         .bind(bing_status_filter)
-        .bind(orphan_only)
+        .bind(discovered_via)
         .bind(bing_filter)
         .bind(google_filter)
         .fetch_one(&self.pool)
@@ -121,7 +121,7 @@ impl UrlRepo {
               AND ($3 IS NULL OR seo_status = $3)
               AND ($4 IS NULL OR gsc_index_status = $4)
               AND ($5 IS NULL OR bing_index_status = $5)
-              AND (NOT $6 OR discovered_via = 'gsc_orphan')
+              AND ($6 IS NULL OR discovered_via = $6)
               AND ($7 IS NULL OR bing_status = $7)
               AND ($8 IS NULL OR google_status = $8)
             ORDER BY priority ASC, id DESC
@@ -133,7 +133,7 @@ impl UrlRepo {
         .bind(seo_filter)
         .bind(gsc_status_filter)
         .bind(bing_status_filter)
-        .bind(orphan_only)
+        .bind(discovered_via)
         .bind(bing_filter)
         .bind(google_filter)
         .bind(limit)
@@ -230,7 +230,7 @@ mod tests {
         let repo = UrlRepo::new(pool);
 
         let (page_two, total) = repo
-            .list_filtered(1, 2, 1, None, None, None, None, false, None, None)
+            .list_filtered(1, 2, 1, None, None, None, None, None, None, None)
             .await?;
         assert_eq!(total, 3);
         assert_eq!(page_two.len(), 1);
@@ -245,7 +245,7 @@ mod tests {
                 None,
                 Some("INDEXED"),
                 Some("NOT_INDEXED"),
-                true,
+                Some("gsc_orphan"),
                 None,
                 None,
             )
@@ -253,6 +253,23 @@ mod tests {
         assert_eq!(total, 1);
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].url, "https://example.com/orphan");
+
+        let (sitemap_only, total_sitemap) = repo
+            .list_filtered(
+                1,
+                1,
+                50,
+                None,
+                None,
+                None,
+                None,
+                Some("sitemap"),
+                None,
+                None,
+            )
+            .await?;
+        assert_eq!(total_sitemap, 2);
+        assert_eq!(sitemap_only.len(), 2);
 
         Ok(())
     }
