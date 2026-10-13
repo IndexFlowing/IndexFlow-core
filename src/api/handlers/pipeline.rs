@@ -73,6 +73,30 @@ async fn build_action(
         } else {
             (false, "")
         }
+    } else if stage == PipelineStage::GoogleSubmit && !is_running {
+        let site = state.site_service.get_site_or_default(Some(site_id)).await.ok().flatten();
+        if let Some(s) = site {
+            if s.google_quota_paused() {
+                (true, "Google 配额已暂停")
+            } else if !s.has_google_credentials() {
+                (true, "未配置 Google 凭据")
+            } else {
+                (false, "")
+            }
+        } else {
+            (false, "")
+        }
+    } else if stage == PipelineStage::BingSubmit && !is_running {
+        let site = state.site_service.get_site_or_default(Some(site_id)).await.ok().flatten();
+        if let Some(s) = site {
+            if !s.has_bing_credentials() {
+                (true, "未配置 IndexNow Key")
+            } else {
+                (false, "")
+            }
+        } else {
+            (false, "")
+        }
     } else {
         (false, "")
     };

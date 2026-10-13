@@ -17,6 +17,8 @@ pub struct DashboardStats {
     pub seo_issues: i64,
     pub seo_warnings: i64,
     pub pending_submit: i64,
+    pub pending_google_submit: i64,
+    pub pending_bing_submit: i64,
     pub gsc_used_24h: i64,
     pub last_seo_scan_at: Option<DateTime<Utc>>,
 }
@@ -24,11 +26,12 @@ pub struct DashboardStats {
 #[allow(dead_code)]
 impl DashboardStats {
     pub fn seo_health_score(&self) -> i64 {
-        let audited = self.seo_passed + self.seo_issues;
-        if audited == 0 {
+        let total = self.audited_total();
+        if total == 0 {
             100
         } else {
-            ((self.seo_passed as f64 / audited as f64) * 100.0)
+            let healthy = self.seo_passed + self.seo_warnings;
+            ((healthy as f64 / total as f64) * 100.0)
                 .clamp(0.0, 100.0)
                 .round() as i64
         }
@@ -38,8 +41,12 @@ impl DashboardStats {
         format!("style=\"width: {}%;\"", self.seo_health_score())
     }
 
+    pub fn google_total_not_indexed(&self) -> i64 {
+        self.google_not_indexed + self.google_crawled_not_indexed + self.google_discovered_not_indexed
+    }
+
     pub fn google_index_rate(&self) -> i64 {
-        let inspected = self.google_indexed + self.google_not_indexed;
+        let inspected = self.google_indexed + self.google_total_not_indexed();
         if inspected == 0 {
             0
         } else {
@@ -83,10 +90,31 @@ impl DashboardStats {
     }
 
     pub fn audited_total(&self) -> i64 {
-        self.seo_passed + self.seo_issues
+        self.seo_passed + self.seo_warnings + self.seo_issues
     }
 
     pub fn pending_seo_audit(&self) -> i64 {
         (self.url_total - self.audited_total()).max(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DashboardStats;
+
+    #[test]
+    fn seo_stats_three_state_closure_and_health_score() {
+        let stats = DashboardStats {
+            url_total: 5008,
+            seo_passed: 473,
+            seo_warnings: 4259,
+            seo_issues: 276,
+            ..Default::default()
+        };
+
+        assert_eq!(stats.audited_total(), 5008);
+        assert_eq!(stats.pending_seo_audit(), 0);
+        // (473 + 4259) / 5008 = 4732 / 5008 = 0.944888... -> 94
+        assert_eq!(stats.seo_health_score(), 94);
     }
 }

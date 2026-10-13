@@ -31,7 +31,7 @@
             <span>{{ t.card_google_not_indexed }}</span>
             <span>✗</span>
         </div>
-        <div class="mt-3 text-3xl font-extrabold text-rose-300 font-mono">{{ stats.google_not_indexed }}</div>
+        <div class="mt-3 text-3xl font-extrabold text-rose-300 font-mono">{{ stats.google_total_not_indexed() }}</div>
         <div class="mt-1.5 text-xs text-rose-400/80 flex items-center gap-1.5">
             <span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-400"></span>
             <span>待检测 {{ stats.google_uninspected }} 篇</span>

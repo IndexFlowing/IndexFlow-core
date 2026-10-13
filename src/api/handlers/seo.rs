@@ -64,7 +64,7 @@ pub async fn render_seo(
             q.status.as_deref(),
             None,
             None,
-            None,
+            false,
             None,
             None,
         )

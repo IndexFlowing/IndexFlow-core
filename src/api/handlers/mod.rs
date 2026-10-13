@@ -1,7 +1,8 @@
 pub mod auth;
+pub mod bing;
 pub mod dashboard;
 pub mod extension;
-pub mod indexing;
+pub mod google;
 pub mod monitoring;
 pub mod pipeline;
 pub mod seo;
@@ -64,6 +65,7 @@ pub struct QueryParams {
     pub gsc_status: Option<String>,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub bing_status: Option<String>,
+    #[allow(dead_code)]
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub orphan: Option<String>,
 }

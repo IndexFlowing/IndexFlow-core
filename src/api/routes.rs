@@ -1,12 +1,13 @@
 // src/api/routes.rs
 use super::handlers::{
     auth::{handle_login, handle_setup, render_login, render_setup},
+    bing::render_bing,
     dashboard::{
         api_get_stats, render_dashboard, render_partial_recent_urls, render_partial_stats,
     },
     extension::action_extension_inspect, // 核心新增
+    google::render_google,
     health_check,
-    indexing::render_indexing,
     monitoring::{
         action_batch_watch, action_toggle_watch, render_monitoring_detail, render_monitoring_list,
     },
@@ -20,7 +21,7 @@ use super::handlers::{
         handle_test_indexnow, render_settings,
     },
     sitemap::render_sitemap,
-    submit::render_submit,
+    submit::{render_submit_bing, render_submit_google, render_submit_redirect},
     url_detail::render_url_detail_modal,
     AppState,
 };
@@ -50,11 +51,15 @@ pub fn build_router(state: AppState) -> Router {
         .route("/sitemap", get(render_sitemap))
         .route("/seo", get(render_seo))
         .route("/seo/detail/:id", get(render_seo_detail_page))
-        .route("/indexing", get(render_indexing))
+        .route("/google", get(render_google))
+        .route("/gsc", get(render_google))
+        .route("/bing", get(render_bing))
+        .route("/indexing", get(render_google))
         .route("/monitoring", get(render_monitoring_list))
         .route("/monitoring/:id", get(render_monitoring_detail))
-        .route("/gsc", get(render_indexing))
-        .route("/submit", get(render_submit))
+        .route("/submit", get(render_submit_redirect))
+        .route("/submit/google", get(render_submit_google))
+        .route("/submit/bing", get(render_submit_bing))
         .route("/urls", get(render_dashboard))
         .route("/settings", get(render_settings).post(handle_save_settings))
         .route("/login", get(render_login).post(handle_login))

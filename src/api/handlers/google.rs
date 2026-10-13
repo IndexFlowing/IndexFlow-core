@@ -10,29 +10,26 @@ use axum::{
 };
 
 #[derive(Template)]
-#[template(path = "indexing.html")]
-pub struct IndexingTemplate {
+#[template(path = "google.html")]
+pub struct GoogleTemplate {
     pub lang: &'static str,
     pub t: &'static Translations,
     pub stats: DashboardStats,
+    pub domain: String,
     pub items: Vec<Url>,
     pub total: i64,
     pub page: i64,
     pub limit: i64,
-    pub gsc_status: Option<String>,
-    pub bing_status: Option<String>,
-    pub orphan_only: bool,
+    pub filter_status: Option<String>,
     pub query_str: Option<String>,
     pub all_sites: Vec<Site>,
     pub current_site_id: i64,
-    pub has_bing_key: bool,
     pub has_google_key: bool,
     pub is_gsc_running: bool,
-    pub is_bing_running: bool,
     pub dry_run: bool,
 }
 
-pub async fn render_indexing(
+pub async fn render_google(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(q): Query<QueryParams>,
@@ -52,10 +49,6 @@ pub async fn render_indexing(
         .flatten();
     let current_site_id = site.as_ref().map(|s| s.id).unwrap_or(1);
 
-    let has_bing_key = site
-        .as_ref()
-        .map(|s| s.has_bing_webmaster_key())
-        .unwrap_or(false);
     let has_google_key = site
         .as_ref()
         .map(|s| s.has_google_credentials())
@@ -68,8 +61,9 @@ pub async fn render_indexing(
         .unwrap_or_default();
     let page = q.page.unwrap_or(1).max(1);
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let orphan_only = q.orphan.as_deref() == Some("1") || q.orphan.as_deref() == Some("true");
-    let discovered_via_filter = if orphan_only { Some("gsc_orphan") } else { None };
+
+    let filter_status = q.status.clone().or_else(|| q.gsc_status.clone());
+
     let (items, total) = state
         .url_service
         .list_filtered(
@@ -78,9 +72,9 @@ pub async fn render_indexing(
             limit,
             q.q.as_deref(),
             None,
-            q.gsc_status.as_deref(),
-            q.bing_status.as_deref(),
-            discovered_via_filter,
+            filter_status.as_deref(),
+            None,
+            false,
             None,
             None,
         )
@@ -91,30 +85,24 @@ pub async fn render_indexing(
         .record(current_site_id, items.iter().map(|url| url.id).collect());
 
     HtmlTemplate(
-        IndexingTemplate {
+        GoogleTemplate {
             lang: lang.as_str(),
             t,
             stats,
+            domain: site.as_ref().map(|s| s.domain.clone()).unwrap_or_default(),
             items,
             total,
             page,
             limit,
-            gsc_status: q.gsc_status,
-            bing_status: q.bing_status,
-            orphan_only: q.orphan.as_deref() == Some("1") || q.orphan.as_deref() == Some("true"),
+            filter_status,
             query_str: q.q,
             all_sites,
             current_site_id,
-            has_bing_key,
             has_google_key,
             is_gsc_running: state
                 .site_service
                 .pipeline
                 .is_running(current_site_id, PipelineStage::GscInspect),
-            is_bing_running: state
-                .site_service
-                .pipeline
-                .is_running(current_site_id, PipelineStage::BingInspect),
             dry_run: state.dry_run,
         },
         set_cookie,

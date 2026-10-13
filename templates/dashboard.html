@@ -76,7 +76,7 @@
                 </div>
                 <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
                     <span>已编入: <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b></span>
-                    <span>未编入: <b class="text-rose-400 font-mono">{{ stats.google_not_indexed }}</b></span>
+                    <span>未编入: <b class="text-rose-400 font-mono">{{ stats.google_total_not_indexed() }}</b></span>
                 </div>
             </div>
         </div>
@@ -140,30 +140,58 @@
                 </div>
             </a>
 
-            <!-- 3. 官方收录监测雷达 (先测收录) -->
-            <a href="/indexing?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
+            <!-- 3. Google 官方收录检测 -->
+            <a href="/google?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
                 <div class="flex items-center justify-between">
-                    <div class="h-11 w-11 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center text-xl shadow-inner">🔍</div>
-                    <span class="text-xs text-cyan-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 3 &rarr;</span>
+                    <div class="h-11 w-11 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl shadow-inner">🔍</div>
+                    <span class="text-xs text-emerald-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 3 &rarr;</span>
                 </div>
                 <div>
-                    <h4 class="text-base font-bold text-white group-hover:text-cyan-300 transition">3. 官方收录监测雷达 (Google & Bing)</h4>
+                    <h4 class="text-base font-bold text-white group-hover:text-emerald-300 transition">3. Google 官方收录雷达</h4>
                     <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        双引擎真实收录与爬取时间探测：Google 已收录 <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b> 篇，Bing 已收录 <b class="text-sky-400 font-mono">{{ stats.bing_indexed }}</b> 篇。
+                        GSC 真实收录与覆盖明细核验：已收录 <b class="text-emerald-400 font-mono">{{ stats.google_indexed }}</b> 篇，未编入 <b class="text-rose-400 font-mono">{{ stats.google_total_not_indexed() }}</b> 篇。
                     </p>
                 </div>
             </a>
 
-            <!-- 4. 搜索引擎提交流水线 (后精准推未收录) -->
-            <a href="/submit?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
+            <!-- 4. Google 官方推送流水线 -->
+            <a href="/submit/google?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
                 <div class="flex items-center justify-between">
                     <div class="h-11 w-11 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl shadow-inner">🚀</div>
                     <span class="text-xs text-emerald-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 4 &rarr;</span>
                 </div>
                 <div>
-                    <h4 class="text-base font-bold text-white group-hover:text-emerald-300 transition">4. 搜索引擎主动推送流水线</h4>
+                    <h4 class="text-base font-bold text-white group-hover:text-emerald-300 transition">4. Google 官方推送流水线</h4>
                     <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                        仅对“门禁通过 + 官方未收录”页面精准推送，待提交 <b class="text-emerald-300 font-mono">{{ stats.pending_submit }}</b> 条，拒绝盲推浪费配额。
+                        Google Indexing API 官方推送：门禁待推 <b class="text-emerald-300 font-mono">{{ stats.pending_google_submit }}</b> 篇，日配额精细化管控。
+                    </p>
+                </div>
+            </a>
+
+            <!-- 5. Bing 官方收录检测 -->
+            <a href="/bing?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="h-11 w-11 rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center justify-center text-xl shadow-inner">⚡</div>
+                    <span class="text-xs text-sky-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 5 &rarr;</span>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-white group-hover:text-sky-300 transition">5. Bing 官方收录雷达</h4>
+                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                        Bing Webmaster 官方数据探测：已收录 <b class="text-sky-400 font-mono">{{ stats.bing_indexed }}</b> 篇，官方收录率 <b class="text-white font-mono">{{ stats.bing_index_rate() }}%</b>。
+                    </p>
+                </div>
+            </a>
+
+            <!-- 6. Bing IndexNow 极速推送 -->
+            <a href="/submit/bing?site_id={{ current_site_id }}" class="group bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/60 rounded-2xl p-6 transition-all duration-200 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="h-11 w-11 rounded-2xl bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center justify-center text-xl shadow-inner">⚡</div>
+                    <span class="text-xs text-sky-400 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">进入阶段 6 &rarr;</span>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-white group-hover:text-sky-300 transition">6. Bing IndexNow 极速推送</h4>
+                    <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                        IndexNow 极速秒级感知：门禁待推 <b class="text-sky-300 font-mono">{{ stats.pending_bing_submit }}</b> 篇，一键批量推送提交。
                     </p>
                 </div>
             </a>

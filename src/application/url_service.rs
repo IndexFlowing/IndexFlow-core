@@ -74,6 +74,14 @@ impl UrlService {
         self.bing_svc.test_webmaster_key(key, domain).await
     }
 
+    pub async fn google_quota_window(
+        &self,
+        site_id: i64,
+        total: u32,
+    ) -> anyhow::Result<crate::infrastructure::GoogleQuotaWindow> {
+        self.submissions.google_quota_window(site_id, total).await
+    }
+
     pub async fn list_filtered(
         &self,
         site_id: i64,
@@ -83,7 +91,7 @@ impl UrlService {
         seo_filter: Option<&str>,
         gsc_status_filter: Option<&str>,
         bing_status_filter: Option<&str>,
-        discovered_via: Option<&str>,
+        orphan_only: bool,
         bing_filter: Option<&str>,
         google_filter: Option<&str>,
     ) -> anyhow::Result<(Vec<Url>, i64)> {
@@ -96,7 +104,7 @@ impl UrlService {
                 seo_filter,
                 gsc_status_filter,
                 bing_status_filter,
-                discovered_via,
+                orphan_only,
                 bing_filter,
                 google_filter,
             )
@@ -111,7 +119,7 @@ impl UrlService {
     ) -> anyhow::Result<(Vec<Url>, i64)> {
         self.urls
             .list_filtered(
-                site_id, page, limit, None, None, None, None, None, None, None,
+                site_id, page, limit, None, None, None, None, false, None, None,
             )
             .await
     }

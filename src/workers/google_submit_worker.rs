@@ -52,13 +52,13 @@ impl GoogleSubmitWorker {
     async fn tick(&self) -> anyhow::Result<()> {
         let running_sites = self
             .pipeline
-            .running_sites_for_stage(PipelineStage::PushSubmit);
+            .running_sites_for_stage(PipelineStage::GoogleSubmit);
         if running_sites.is_empty() {
             return Ok(());
         }
 
         for site_id in running_sites {
-            if !self.pipeline.is_running(site_id, PipelineStage::PushSubmit) {
+            if !self.pipeline.is_running(site_id, PipelineStage::GoogleSubmit) {
                 continue;
             }
 
@@ -67,19 +67,16 @@ impl GoogleSubmitWorker {
                 .fetch_pending_google(site_id, self.config.submit_worker_batch)
                 .await?;
             if pending.is_empty() {
-                let bing_left = self.urls.fetch_pending_bing(site_id, 1).await?;
-                if bing_left.is_empty() {
-                    self.pipeline.stop(site_id, PipelineStage::PushSubmit);
-                    info!(
-                        site_id,
-                        "🎉 该站点全引擎提交队列已全部处理完毕，Worker 回到待机"
-                    );
-                }
+                self.pipeline.stop(site_id, PipelineStage::GoogleSubmit);
+                info!(
+                    site_id,
+                    "🎉 该站点 Google 提交队列已全部处理完毕，Worker 回到待机"
+                );
                 continue;
             }
 
             for url in pending {
-                if !self.pipeline.is_running(site_id, PipelineStage::PushSubmit) {
+                if !self.pipeline.is_running(site_id, PipelineStage::GoogleSubmit) {
                     break;
                 }
 

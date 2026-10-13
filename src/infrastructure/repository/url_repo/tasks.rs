@@ -6,7 +6,9 @@ impl UrlRepo {
         let rows = sqlx::query_as::<_, Url>(
             r#"
             SELECT * FROM urls
-            WHERE site_id = $1 AND seo_status = 'PENDING'
+            WHERE site_id = $1 
+              AND discovered_via = 'sitemap'
+              AND seo_status = 'PENDING'
             ORDER BY priority ASC, id ASC
             LIMIT $2
             "#,
@@ -92,6 +94,7 @@ impl UrlRepo {
             r#"
             SELECT * FROM urls
             WHERE site_id = $1
+              AND discovered_via = 'sitemap'
               AND seo_status != 'FAIL'
               AND bing_status IN ('NONE', 'FAILED')
               AND bing_index_status != 'INDEXED'
@@ -112,6 +115,7 @@ impl UrlRepo {
             r#"
             SELECT * FROM urls
             WHERE site_id = $1
+              AND discovered_via = 'sitemap'
               AND seo_status != 'FAIL'
               AND google_status IN ('NONE', 'FAILED')
               AND gsc_index_status != 'INDEXED'
@@ -124,5 +128,32 @@ impl UrlRepo {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UrlRepo;
+    use sqlx::SqlitePool;
+
+    #[tokio::test]
+    async fn fetch_pending_seo_ignores_orphan_urls() -> anyhow::Result<()> {
+        let pool = SqlitePool::connect("sqlite::memory:").await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+
+        sqlx::query(
+            "INSERT INTO urls (site_id, url, url_hash, seo_status, priority, discovered_via)
+             VALUES (1, 'https://example.com/sitemap-pending', 'h1', 'PENDING', 10, 'sitemap'),
+                    (1, 'https://example.com/orphan-pending', 'h2', 'PENDING', 5, 'gsc_orphan'),
+                    (1, 'https://example.com/sitemap-pass', 'h3', 'PASS', 1, 'sitemap')",
+        )
+        .execute(&pool)
+        .await?;
+
+        let repo = UrlRepo::new(pool);
+        let pending = repo.fetch_pending_seo(1, 50).await?;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].url, "https://example.com/sitemap-pending");
+        Ok(())
     }
 }
