@@ -7,11 +7,12 @@ pub struct GoogleIndexingClient {
     http: reqwest::Client,
     auth: GoogleAuthClient,
     dry_run: bool,
+    log_raw_payload: bool,
 }
 
 impl GoogleIndexingClient {
-    pub fn new(http: reqwest::Client, auth: GoogleAuthClient, dry_run: bool) -> Self {
-        Self { http, auth, dry_run }
+    pub fn new(http: reqwest::Client, auth: GoogleAuthClient, dry_run: bool, log_raw_payload: bool) -> Self {
+        Self { http, auth, dry_run, log_raw_payload }
     }
 
     pub async fn submit_batch(
@@ -75,6 +76,10 @@ impl GoogleIndexingClient {
                 "type": "URL_UPDATED"
             });
 
+            if self.log_raw_payload {
+                tracing::debug!(url = %url, payload = %payload.to_string(), "📤 [Google Indexing] 发送推送请求报文");
+            }
+
             let res = self
                 .http
                 .post("https://indexing.googleapis.com/v3/urlNotifications:publish")
@@ -90,6 +95,17 @@ impl GoogleIndexingClient {
                     let body = resp.text().await.unwrap_or_default();
                     let is_success = status == 200;
 
+                    if self.log_raw_payload {
+                        tracing::debug!(url = %url, status = status, raw_response = %body, "📥 [Google Indexing] 收到推送响应报文");
+                    }
+
+                    tracing::info!(
+                        url = %url,
+                        status = status,
+                        is_success = is_success,
+                        "🚀 [Google Indexing] 推送处理完成"
+                    );
+
                     results.push(SubmissionResult {
                         url: url.clone(),
                         is_success,
@@ -104,6 +120,7 @@ impl GoogleIndexingClient {
                     }
                 }
                 Err(e) => {
+                    warn!(url = %url, error = %e, "Google Indexing API 网络请求异常");
                     results.push(SubmissionResult::failure(
                         url.clone(),
                         None,

@@ -1,3 +1,4 @@
+// src/workers/bing_inspect_worker.rs
 use crate::application::{BingService, PipelineManager};
 use crate::config::AppConfig;
 use crate::domain::PipelineStage;
@@ -38,7 +39,7 @@ impl BingInspectWorker {
     pub fn start(self: Arc<Self>) {
         let interval = Duration::from_secs(self.config.submit_worker_interval_secs);
         tokio::spawn(async move {
-            info!("Bing Inspect Worker 待机就绪 (串行处理 / 500ms 间隔)");
+            info!("Bing Inspect Worker 待机就绪 (串行平滑限流版 / 1800ms 间隔 / 自动冷却退避)");
             loop {
                 if let Err(e) = self.tick().await {
                     error!(error = %e, "Bing inspect worker tick failed");
@@ -86,7 +87,8 @@ impl BingInspectWorker {
                     break;
                 }
 
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                // 【核心修改 1】：从 500ms 提升到安全的 1800ms，避开微软单 Host 瞬时频控阈值
+                tokio::time::sleep(Duration::from_millis(1800)).await;
 
                 let site = match self.sites.find_by_id(url.site_id).await {
                     Ok(Some(site)) => site,
@@ -133,17 +135,28 @@ impl BingInspectWorker {
                     break;
                 }
 
+                tracing::info!(url = %url.url, site = %site.domain, "🔍 [Bing Worker] 正在调用 Bing Webmaster 探测收录");
+
                 match self.bing_svc.inspect_one(&site, &url.url).await {
+                    // 【核心修改 2】：触发频控时不关停 Pipeline，休眠 25 秒自动等待微软令牌桶冷却，随后继续执行
                     Ok(res) if res.is_throttled => {
                         warn!(
                             site_id,
                             url_id = url.id,
-                            "Bing API 触发频控，立即停止当前站点检测批次"
+                            "⏳ Bing API 触发站点级频控 (ThrottleHost)，Worker 自动进入 25 秒冷却退避期..."
                         );
-                        self.pipeline.stop(site_id, PipelineStage::BingInspect);
-                        break;
+                        tokio::time::sleep(Duration::from_secs(25)).await;
+                        // 不更新状态，保留该 URL 为 UNKNOWN，下一个循环无感继续重试
+                        continue;
                     }
                     Ok(res) => {
+                        tracing::info!(
+                            url = %url.url,
+                            index_status = %res.index_status,
+                            is_indexed = res.is_indexed,
+                            coverage = ?res.coverage_state,
+                            "✅ [Bing Worker] 检测解析完成并准备落库"
+                        );
                         if let Err(e) = self
                             .bing_svc
                             .apply_inspect_result(url.id, &res, url.is_watched)

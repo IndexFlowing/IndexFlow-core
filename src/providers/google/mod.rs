@@ -16,10 +16,10 @@ pub struct GoogleProvider {
 }
 
 impl GoogleProvider {
-    pub fn new(client: reqwest::Client, dry_run: bool) -> Self {
+    pub fn new(client: reqwest::Client, dry_run: bool, log_raw_payload: bool) -> Self {
         let auth = GoogleAuthClient::new(client.clone());
-        let gsc = GscClient::new(client.clone(), auth.clone());
-        let indexing = GoogleIndexingClient::new(client, auth, dry_run);
+        let gsc = GscClient::new(client.clone(), auth.clone(), log_raw_payload);
+        let indexing = GoogleIndexingClient::new(client, auth, dry_run, log_raw_payload);
 
         Self {
             gsc,

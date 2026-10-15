@@ -3,6 +3,7 @@ mod mutations;
 mod queries;
 mod tasks;
 
+pub use mutations::GscInspectionDetails;
 use sqlx::SqlitePool;
 
 #[derive(Clone)]

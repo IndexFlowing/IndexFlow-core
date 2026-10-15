@@ -25,6 +25,7 @@ pub struct SeoTemplate {
     pub current_site_id: i64,
     pub is_running: bool,
     pub dry_run: bool,
+    pub has_multiple_pages: bool,
 }
 
 pub async fn render_seo(
@@ -70,6 +71,7 @@ pub async fn render_seo(
         )
         .await
         .unwrap_or_default();
+    let has_multiple_pages = total > items.len() as i64;
 
     HtmlTemplate(
         SeoTemplate {
@@ -89,6 +91,7 @@ pub async fn render_seo(
                 .pipeline
                 .is_running(current_site_id, PipelineStage::SeoGate),
             dry_run: state.dry_run,
+            has_multiple_pages,
         },
         set_cookie,
     )

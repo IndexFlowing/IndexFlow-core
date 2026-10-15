@@ -41,6 +41,20 @@ impl DashboardStats {
         format!("style=\"width: {}%;\"", self.seo_health_score())
     }
 
+    pub fn seo_audit_percent(&self) -> i64 {
+        if self.url_total == 0 {
+            100
+        } else {
+            ((self.audited_total() as f64 / self.url_total as f64) * 100.0)
+                .clamp(0.0, 100.0)
+                .round() as i64
+        }
+    }
+
+    pub fn seo_audit_style_attr(&self) -> String {
+        format!("style=\"width: {}%;\"", self.seo_audit_percent())
+    }
+
     pub fn google_total_not_indexed(&self) -> i64 {
         self.google_not_indexed + self.google_crawled_not_indexed + self.google_discovered_not_indexed
     }

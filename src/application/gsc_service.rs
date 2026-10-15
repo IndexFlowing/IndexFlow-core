@@ -1,5 +1,6 @@
+// src/application/gsc_service.rs
 use crate::domain::coverage_to_index_status;
-use crate::infrastructure::{IndexHistoryRepo, Site, SiteRepo, UrlRepo};
+use crate::infrastructure::{GscInspectionDetails, IndexHistoryRepo, Site, SiteRepo, UrlRepo};
 use crate::providers::google::{GoogleProvider, GscInspectResult};
 use chrono::Utc;
 use tracing::info;
@@ -47,30 +48,34 @@ impl GscService {
             anyhow::anyhow!("No Google credentials configured for site: {}", site.domain)
         })?;
 
-        let property = if let Some(ref p) = site.gsc_property_url {
-            p.clone()
-        } else {
-            let p = self.google.resolve_gsc_property(sa, &site.domain).await?;
-            self.sites.set_gsc_property(site.id, &p).await?;
-            p
+        // 自动纠正：避免使用数据库中残留的历史错误 sc-domain:www. 缓存
+        let property = match site.gsc_property_url.as_deref() {
+            Some(p) if !p.starts_with("sc-domain:www.") => p.to_string(),
+            _ => {
+                let p = self.google.resolve_gsc_property(sa, &site.domain).await?;
+                let _ = self.sites.set_gsc_property(site.id, &p).await;
+                p
+            }
         };
 
         self.google.inspect_url(sa, &property, page_url).await
     }
 
-    /// 【核心新增】通过 Search Analytics API 一键批量同步已曝光的已收录 URL 资产
+    /// 【核心】通过 Search Analytics API 一键批量同步已曝光的已收录 URL 资产
     pub async fn sync_indexed_from_search_analytics(&self, site: &Site) -> anyhow::Result<u64> {
         let sa = site
             .google_service_account_json
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("当前站点尚未配置 Google Service Account 密钥"))?;
 
-        let property = if let Some(ref p) = site.gsc_property_url {
-            p.clone()
-        } else {
-            let p = self.google.resolve_gsc_property(sa, &site.domain).await?;
-            self.sites.set_gsc_property(site.id, &p).await?;
-            p
+        // 自动纠正：避免使用数据库中残留的历史错误 sc-domain:www. 缓存
+        let property = match site.gsc_property_url.as_deref() {
+            Some(p) if !p.starts_with("sc-domain:www.") => p.to_string(),
+            _ => {
+                let p = self.google.resolve_gsc_property(sa, &site.domain).await?;
+                let _ = self.sites.set_gsc_property(site.id, &p).await;
+                p
+            }
         };
 
         info!(domain = %site.domain, property = %property, "⚡ 正在从 Google Search Analytics 批量同步曝光收录池...");
@@ -116,14 +121,45 @@ impl GscService {
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                 .map(|d| d.with_timezone(&Utc));
 
+            let referring_urls_str = if result.referring_urls.is_empty() {
+                None
+            } else {
+                Some(result.referring_urls.join("\n"))
+            };
+
+            let details = GscInspectionDetails {
+                verdict: result.verdict.as_deref(),
+                crawled_as: result.crawled_as.as_deref(),
+                page_fetch_state: result.page_fetch_state.as_deref(),
+                robots_txt_state: result.robots_txt_state.as_deref(),
+                indexing_state: result.indexing_state.as_deref(),
+                user_canonical: result.user_canonical.as_deref(),
+                google_canonical: result.google_canonical.as_deref(),
+                referring_urls: referring_urls_str.as_deref(),
+            };
+
             self.urls
-                .apply_gsc_inspection(url_id, index_status, Some(coverage), crawled)
+                .apply_gsc_inspection(
+                    url_id,
+                    index_status,
+                    Some(coverage),
+                    crawled,
+                    Some(&details),
+                )
                 .await?;
             if is_watched {
                 self.history
                     .insert_if_changed(url_id, "google", index_status, Some(coverage), crawled)
                     .await?;
             }
+        } else if !result.is_quota_exceeded {
+            let reason = result
+                .raw_response
+                .as_deref()
+                .unwrap_or("Google Inspection API 返回失败");
+            self.urls
+                .apply_gsc_inspection(url_id, "FAILED", Some(reason), None, None)
+                .await?;
         }
         Ok(())
     }

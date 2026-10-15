@@ -160,8 +160,17 @@ impl GoogleSubmitWorker {
                     break;
                 }
 
+                tracing::info!(site_id, url = %url.url, "🚀 [Google Submit Worker] 正在调用 Indexing API 推送单条 URL");
+
                 match self.submission.submit_url_google(&site, &url.url).await {
                     Ok(res) => {
+                        tracing::info!(
+                            site_id,
+                            url = %url.url,
+                            is_success = res.is_success,
+                            status = ?res.status_code,
+                            "🚀 [Google Submit Worker] URL 推送完成"
+                        );
                         if let Err(e) = self
                             .logs
                             .insert(

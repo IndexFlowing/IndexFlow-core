@@ -131,12 +131,24 @@ impl BingSubmitWorker {
                 }
 
                 let key = site.bing_indexnow_key.as_deref().unwrap_or("");
+                tracing::info!(site_id, url = %url.url, "🚀 [Bing Submit Worker] 正在调用 IndexNow 推送单条 URL");
                 let results = match self
                     .submission
                     .submit_url_batch_bing(&site.domain, key, &[url.url.clone()])
                     .await
                 {
-                    Ok(results) => results,
+                    Ok(results) => {
+                        if let Some(r) = results.first() {
+                            tracing::info!(
+                                site_id,
+                                url = %url.url,
+                                is_success = r.is_success,
+                                status = ?r.status_code,
+                                "🚀 [Bing Submit Worker] URL 推送完成"
+                            );
+                        }
+                        results
+                    }
                     Err(e) => {
                         error!(error = %e, site_id, url_id = url.id, url = %url.url, "Bing submission request failed");
                         let message = e.to_string();

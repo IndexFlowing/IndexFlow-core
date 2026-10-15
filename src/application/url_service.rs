@@ -128,6 +128,33 @@ impl UrlService {
         self.urls.find_by_id(id).await
     }
 
+    pub async fn reset_seo_status_for_recheck(
+        &self,
+        site_id: i64,
+        status: Option<&str>,
+        query_str: Option<&str>,
+    ) -> anyhow::Result<u64> {
+        let clean_status = status.and_then(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("all") {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        let clean_q = query_str.and_then(|q| {
+            let trimmed = q.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        self.urls
+            .reset_seo_status_for_recheck(site_id, clean_status, clean_q)
+            .await
+    }
+
     pub async fn recheck(&self, id: i64) -> anyhow::Result<Option<RecheckResult>> {
         let Some(url) = self.urls.find_by_id(id).await? else {
             return Ok(None);

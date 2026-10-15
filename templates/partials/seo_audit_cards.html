@@ -281,7 +281,8 @@
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+        <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+            <!-- 基础状态栏 -->
             <div class="flex items-center justify-between">
                 <span class="font-bold text-white">Google GSC</span>
                 {% if url.is_gsc_indexed() %}
@@ -292,12 +293,56 @@
                 <span class="text-rose-400 font-bold">✗ 未收录</span>
                 {% endif %}
             </div>
-            <div class="text-[11px] text-slate-400 truncate">
-                覆盖: {{ url.gsc_coverage_state.as_deref().unwrap_or("暂无记录") }}
+            
+            <!-- 覆盖状态与爬取时间 -->
+            <div class="text-[11px] text-slate-300">
+                覆盖: <span class="font-mono text-cyan-300">{{ url.gsc_coverage_state.as_deref().unwrap_or("暂无记录") }}</span>
             </div>
-            <div class="text-[10px] text-slate-500 font-mono">
-                最后爬取: {% if let Some(t) = url.gsc_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
+            <div class="text-[10px] text-slate-400 font-mono">
+                上次抓取时间: {% if let Some(t) = url.gsc_last_crawled_at %}{{ t }}{% else %}暂无记录{% endif %}
             </div>
+
+            <!-- 核心新增：官方深度索引详情面板 (只要有检测记录或状态非 UNKNOWN 即完整展示) -->
+            {% if url.gsc_inspected_at.is_some() || url.gsc_index_status != "UNKNOWN" %}
+            <div class="mt-2 pt-2 border-t border-slate-800/80 space-y-1.5 text-[11px] font-sans">
+                {% if let Some(v) = url.gsc_verdict %}
+                <div class="flex justify-between">
+                    <span class="text-slate-400">索引判定结果:</span>
+                    <span class="font-mono text-slate-200">{{ v }}</span>
+                </div>
+                {% endif %}
+                <div class="flex justify-between">
+                    <span class="text-slate-400">抓取所用代理:</span>
+                    <span class="font-mono text-slate-200">{{ url.gsc_crawled_as.as_deref().unwrap_or("-") }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">网页抓取状态:</span>
+                    <span class="font-mono text-slate-200">{{ url.gsc_page_fetch_state.as_deref().unwrap_or("-") }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">用户声明规范网址:</span>
+                    <span class="font-mono text-slate-200 truncate max-w-xs" title="{{ url.gsc_user_canonical.as_deref().unwrap_or("-") }}">
+                        {{ url.gsc_user_canonical.as_deref().unwrap_or("-") }}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Google 选定规范网址:</span>
+                    <span class="font-mono text-slate-200 truncate max-w-xs" title="{{ url.gsc_google_canonical.as_deref().unwrap_or("-") }}">
+                        {{ url.gsc_google_canonical.as_deref().unwrap_or("-") }}
+                    </span>
+                </div>
+                {% if !url.referring_urls_list().is_empty() %}
+                <div class="pt-1">
+                    <span class="text-slate-400 block mb-1">引荐来源网页:</span>
+                    <div class="space-y-0.5 bg-slate-950 p-2 rounded-lg border border-slate-800 max-h-24 overflow-y-auto font-mono text-[10px] text-slate-400 break-all">
+                        {% for ref_url in url.referring_urls_list() %}
+                        <div>&bull; {{ ref_url }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
 
         <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">

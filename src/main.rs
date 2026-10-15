@@ -29,17 +29,30 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let config = AppConfig::load();
+
+    let env_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| {
+        format!(
+            "indexflow_core={},indexflow_seo={},indexflow_sitemap={},tower_http=info",
+            config.log_level, config.log_level, config.log_level
+        )
+    });
+
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "indexflow_core=info,tower_http=info".into()),
-        ))
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::new(env_filter))
+        .with(tracing_subscriber::fmt::layer().with_target(false).compact())
         .init();
 
-    info!("IndexFlow starting...");
+    info!(
+        host = %config.server_host,
+        port = config.server_port,
+        db = %config.database_url,
+        level = %config.log_level,
+        log_raw_payload = config.log_raw_payload,
+        dry_run = config.dry_run,
+        "🚀 IndexFlow 系统已启动，主配置文件加载成功"
+    );
 
-    let config = AppConfig::from_env();
     let pool = connect(&config.database_url, config.db_max_connections).await?;
     migrate(&pool).await?;
 
@@ -54,8 +67,8 @@ async fn main() -> anyhow::Result<()> {
     let index_history_repo = IndexHistoryRepo::new(pool.clone());
     let admin_repo = Arc::new(AdminRepo::new(pool.clone()));
 
-    let bing_provider = BingProvider::new(http.clone(), config.dry_run);
-    let google_provider = GoogleProvider::new(http.clone(), config.dry_run);
+    let bing_provider = BingProvider::new(http.clone(), config.dry_run, config.log_raw_payload);
+    let google_provider = GoogleProvider::new(http.clone(), config.dry_run, config.log_raw_payload);
 
     let site_service = Arc::new(SiteService::new(
         site_repo.clone(),

@@ -1,10 +1,24 @@
 <div id="seo-table-container">
 
     <!-- 批量操作浮动提示栏 -->
-    <div id="seo-batch-bar" class="hidden px-5 py-2.5 bg-amber-950/90 border-b border-amber-500/30 flex items-center justify-between transition-all duration-200">
-        <div class="flex items-center gap-2 text-xs text-amber-200">
+    <div id="seo-batch-bar"
+         data-site-id="{{ current_site_id }}"
+         data-status="{{ filter_status.as_deref().unwrap_or("") }}"
+         data-query="{{ query_str.as_deref().unwrap_or("") }}"
+         data-total="{{ total }}"
+         data-page-size="{{ items.len() }}"
+         class="hidden px-5 py-2.5 bg-amber-950/90 border-b border-amber-500/30 flex flex-wrap items-center justify-between gap-3 transition-all duration-200">
+        <div class="flex flex-wrap items-center gap-2 text-xs text-amber-200">
             <span>⚡</span>
             <span>已选中 <b id="seo-selected-count" class="text-white font-mono text-sm">0</b> 个网页</span>
+            {% if has_multiple_pages %}
+            <span id="seo-select-all-category-tip" class="hidden text-amber-300 font-normal">
+                (已选本页 {{ items.len() }} 条。👉 <a href="javascript:void(0)" onclick="selectEntireCategory()" class="underline text-amber-200 font-bold hover:text-white">全选该分类下所有 {{ total }} 条网页</a>)
+            </span>
+            <span id="seo-category-selected-tip" class="hidden text-amber-300 font-normal">
+                (已全选该分类下所有 {{ total }} 条网页。👉 <a href="javascript:void(0)" onclick="cancelEntireCategory()" class="underline text-amber-200 font-medium hover:text-white">撤销跨页全选</a>)
+            </span>
+            {% endif %}
         </div>
         <div class="flex items-center gap-2">
             <button onclick="clearAllSeoSelection()" class="px-3 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-xs text-slate-300 transition cursor-pointer">
@@ -13,7 +27,7 @@
             <button id="seo-batch-submit-btn"
                     onclick="submitSeoBatchRecheck(this)"
                     class="px-3.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-amber-950/40 flex items-center gap-1.5 cursor-pointer">
-                <span>🛡️</span> 批量重新质检
+                <span>🛡️</span> <span>重新质检选中项 (当前页)</span>
             </button>
         </div>
     </div>
@@ -97,7 +111,7 @@
                     class="hover:bg-slate-800/40 transition cursor-pointer group">
                     
                     <td class="pl-4 pr-2 py-3 text-center" onclick="event.stopPropagation()">
-                        <input type="checkbox" name="selected_ids" value="{{ url.id }}" onchange="updateSeoBatchBar()"
+                        <input type="checkbox" name="selected_ids" value="{{ url.id }}" onchange="handleSeoRowCheckboxChange(this)"
                                class="seo-row-checkbox w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-0 focus:ring-offset-0 cursor-pointer">
                     </td>
 

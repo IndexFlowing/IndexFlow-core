@@ -1,0 +1,22 @@
+# IndexFlow 系统主配置文件
+
+[server]
+host = "0.0.0.0"
+port = 8010
+jwt_secret = "indexflow-secret-key-change-in-production"
+
+[database]
+url = "sqlite:indexflow.db?mode=rwc"
+max_connections = 5
+
+[logging]
+# 日志级别: "trace", "debug", "info", "warn", "error"
+level = "debug"
+# 是否打印第三方 API (Google / Bing / HTML) 返回的原始 JSON 与响应报文
+log_raw_payload = true
+
+[pipeline]
+dry_run = false
+worker_poll_interval_secs = 2
+submit_worker_interval_secs = 5
+submit_worker_batch = 10

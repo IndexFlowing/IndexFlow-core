@@ -45,6 +45,14 @@ mod tests {
             gsc_coverage_state: None,
             gsc_last_crawled_at: None,
             gsc_inspected_at: None,
+            gsc_verdict: None,
+            gsc_crawled_as: None,
+            gsc_page_fetch_state: None,
+            gsc_robots_txt_state: None,
+            gsc_indexing_state: None,
+            gsc_user_canonical: None,
+            gsc_google_canonical: None,
+            gsc_referring_urls: None,
             bing_index_status: "UNKNOWN".into(),
             bing_coverage_state: None,
             bing_last_crawled_at: None,
@@ -77,5 +85,17 @@ mod tests {
         let mut sitemap = url("sitemap");
         sitemap.gsc_coverage_state = Some("Auto-Discovered".into());
         assert!(!sitemap.is_orphan());
+    }
+
+    #[test]
+    fn test_referring_urls_list() {
+        let mut u = url("sitemap");
+        assert!(u.referring_urls_list().is_empty());
+
+        u.gsc_referring_urls = Some("https://example.com/a\n\n  https://example.com/b  \n".into());
+        assert_eq!(
+            u.referring_urls_list(),
+            vec!["https://example.com/a", "https://example.com/b"]
+        );
     }
 }

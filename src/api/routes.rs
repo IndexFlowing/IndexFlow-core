@@ -13,7 +13,8 @@ use super::handlers::{
     },
     pipeline::{
         action_batch_inspect, action_batch_submit, action_inspect_url, action_pipeline_start,
-        action_pipeline_stop, action_pipeline_sync, action_submit_url, render_pipeline_action,
+        action_pipeline_stop, action_pipeline_sync, action_recheck_by_filter, action_submit_url,
+        render_pipeline_action,
     },
     seo::{render_seo, render_seo_detail_page},
     settings::{
@@ -90,6 +91,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/urls/:id/submit", post(action_submit_url))
         .route("/urls/batch-inspect", post(action_batch_inspect))
         .route("/urls/batch-submit", post(action_batch_submit))
+        .route("/urls/recheck-by-filter", post(action_recheck_by_filter))
         .route("/monitoring/:id/watch", post(action_toggle_watch))
         .route("/monitoring/batch-watch", post(action_batch_watch));
 

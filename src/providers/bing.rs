@@ -23,14 +23,16 @@ pub struct BingInspectResult {
 pub struct BingProvider {
     client: reqwest::Client,
     dry_run: bool,
+    log_raw_payload: bool,
     site_cache: Arc<RwLock<HashMap<String, String>>>, // 核心新增：站点 URL 内存缓存
 }
 
 impl BingProvider {
-    pub fn new(client: reqwest::Client, dry_run: bool) -> Self {
+    pub fn new(client: reqwest::Client, dry_run: bool, log_raw_payload: bool) -> Self {
         Self {
             client,
             dry_run,
+            log_raw_payload,
             site_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -118,6 +120,8 @@ impl BingProvider {
         site_url: &str,
         inspection_url: &str,
     ) -> anyhow::Result<BingInspectResult> {
+        tracing::info!(url = %inspection_url, site = %site_url, "🔍 [Bing] 正在调用 GetUrlInfo API");
+
         let endpoint = "https://ssl.bing.com/webmaster/api.svc/json/GetUrlInfo";
 
         let params = [
@@ -145,6 +149,10 @@ impl BingProvider {
 
         let status = res.status();
         let body_text = res.text().await.unwrap_or_default();
+
+        if self.log_raw_payload {
+            tracing::debug!(url = %inspection_url, raw_json = %body_text, "📥 [Bing] 收到 GetUrlInfo 原始报文");
+        }
 
         // 捕获 Bing ErrorCode:5 / ThrottleHost 频控，退避而非永久失败
         let is_throttled = body_text.contains("ThrottleHost")
@@ -325,6 +333,10 @@ impl SearchProvider for BingProvider {
             "🚀 [Bing IndexNow] 正在向官方 API 发送真实批量推送..."
         );
 
+        if self.log_raw_payload {
+            tracing::debug!(domain = %clean_domain, payload = %payload.to_string(), "📤 [Bing IndexNow] 发送批量推送报文");
+        }
+
         let res = self
             .client
             .post("https://api.indexnow.org/indexnow")
@@ -339,8 +351,14 @@ impl SearchProvider for BingProvider {
                 let is_success = status == 200 || status == 202;
                 let is_quota = status == 429;
 
+                if self.log_raw_payload {
+                    tracing::debug!(status, body = %body, "📥 [Bing IndexNow] 收到推送响应报文");
+                }
+
                 if !is_success {
                     warn!(status, body = %body, "Bing IndexNow API returned non-success");
+                } else {
+                    info!(domain = %clean_domain, count = urls.len(), "🚀 [Bing IndexNow] 批量推送完成");
                 }
 
                 Ok(urls

@@ -91,7 +91,7 @@ impl GscInspectWorker {
                         error!(site_id, url_id = url.id, url = %url.url, "GSC inspect skipped: site not found");
                         if let Err(e) = self
                             .urls
-                            .apply_gsc_inspection(url.id, "FAILED", Some("站点不存在"), None)
+                            .apply_gsc_inspection(url.id, "FAILED", Some("站点不存在"), None, None)
                             .await
                         {
                             error!(error = %e, site_id, url_id = url.id, "GSC missing site failure persistence failed");
@@ -109,7 +109,7 @@ impl GscInspectWorker {
                     error!(site_id, url_id = url.id, url = %url.url, "GSC inspect skipped: Google credentials are not configured");
                     if let Err(e) = self
                         .urls
-                        .apply_gsc_inspection(url.id, "FAILED", Some(reason), None)
+                        .apply_gsc_inspection(url.id, "FAILED", Some(reason), None, None)
                         .await
                     {
                         error!(error = %e, site_id, url_id = url.id, "GSC missing credentials failure persistence failed");
@@ -131,20 +131,6 @@ impl GscInspectWorker {
                     .await
                 {
                     error!(error = %e, site_id, url_id = url.id, url = %url.url, "GSC inspect result persistence failed");
-                }
-
-                if !result.ok && !result.is_quota_exceeded {
-                    let reason = result
-                        .raw_response
-                        .as_deref()
-                        .unwrap_or("Google Inspection API 返回失败");
-                    if let Err(e) = self
-                        .urls
-                        .apply_gsc_inspection(url.id, "FAILED", Some(reason), None)
-                        .await
-                    {
-                        error!(error = %e, site_id, url_id = url.id, "GSC failed result persistence failed");
-                    }
                 }
 
                 if result.is_quota_exceeded {

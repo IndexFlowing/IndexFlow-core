@@ -5,50 +5,67 @@
 {% block content %}
 <div class="space-y-5">
     
-    <!-- 顶部状态横幅 -->
-    <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div class="space-y-1.5">
-            <div class="flex items-center gap-2.5">
-                <span class="text-lg">🛡️</span>
-                <h2 class="text-base font-bold text-white tracking-tight">本地技术 SEO 质量拦截门禁</h2>
-                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">Pre-flight Gate</span>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
-                <span>质检进度:</span>
-                <span class="text-white font-bold">{{ stats.audited_total() }} / {{ stats.url_total }}</span>
-                <span class="text-slate-500">(待质检 {{ stats.pending_seo_audit() }})</span>
-                <span class="text-slate-700">|</span>
-                <span>正常通过: <b class="text-emerald-400">{{ stats.seo_passed }}</b></span>
-                <span class="text-slate-700">|</span>
-                <span>存在警告: <b class="text-amber-400">{{ stats.seo_warnings }}</b></span>
-                <span class="text-slate-700">|</span>
-                <span>质量拦截: <b class="text-rose-400">{{ stats.seo_issues }}</b></span>
-                <span class="text-slate-700">|</span>
-                <span>健康度: <b class="text-white">{{ stats.seo_health_score() }} 分</b></span>
-            </div>
-        </div>
+    <!-- 顶部状态横幅与动态感知容器 -->
+    <div id="seo-top-banner"
+         {% if is_running %}
+         hx-get="/seo?site_id={{ current_site_id }}&status={{ filter_status.as_deref().unwrap_or("") }}&page={{ page }}&q={{ query_str.as_deref().unwrap_or("") }}"
+         hx-trigger="every 2.5s, refreshTable from:body"
+         hx-select="#seo-top-banner"
+         hx-target="#seo-top-banner"
+         hx-swap="outerHTML"
+         {% endif %}
+         class="space-y-5">
         
-        <!-- 启动增量质检按钮 -->
-        <div class="shrink-0">
-            <div hx-get="/partials/pipeline-action/seo-gate?site_id={{ current_site_id }}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML"
-                 class="h-9 w-44 rounded-xl bg-slate-800/50 animate-pulse"></div>
+        <!-- 顶部状态横幅 -->
+        <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-2">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-lg">🛡️</span>
+                    <h2 class="text-base font-bold text-white tracking-tight">本地技术 SEO 质量拦截门禁</h2>
+                    <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">Pre-flight Gate</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-400 font-mono">
+                    <span>质检进度:</span>
+                    <span class="text-white font-bold">{{ stats.audited_total() }} / {{ stats.url_total }}</span>
+                    <span class="text-slate-500">(待质检 {{ stats.pending_seo_audit() }})</span>
+                    <span class="text-slate-700">|</span>
+                    <span>正常通过: <b class="text-emerald-400">{{ stats.seo_passed }}</b></span>
+                    <span class="text-slate-700">|</span>
+                    <span>存在警告: <b class="text-amber-400">{{ stats.seo_warnings }}</b></span>
+                    <span class="text-slate-700">|</span>
+                    <span>质量拦截: <b class="text-rose-400">{{ stats.seo_issues }}</b></span>
+                    <span class="text-slate-700">|</span>
+                    <span>健康度: <b class="text-white">{{ stats.seo_health_score() }} 分</b></span>
+                </div>
+                <!-- 质检进度条 -->
+                <div class="w-full sm:w-80 bg-slate-950 rounded-full h-1.5 border border-slate-800 overflow-hidden mt-1.5">
+                    <div class="h-full rounded-full transition-all duration-500 bg-amber-500" 
+                         {{ stats.seo_audit_style_attr()|safe }}></div>
+                </div>
+            </div>
+            
+            <!-- 启动增量质检按钮 -->
+            <div class="shrink-0">
+                <div hx-get="/partials/pipeline-action/seo-gate?site_id={{ current_site_id }}"
+                     hx-trigger="load"
+                     hx-swap="outerHTML"
+                     class="h-9 w-44 rounded-xl bg-slate-800/50 animate-pulse"></div>
+            </div>
         </div>
-    </div>
 
-    <!-- 运行动态感知提示横幅 -->
-    {% if is_running %}
-    <div class="bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-amber-200 animate-pulse shadow-lg">
-        <div class="flex items-center gap-3">
-            <span class="animate-spin text-base">⏳</span>
-            <span>
-                正在以 <b>30 并发安全速率</b> 执行全站页面深度 SEO 质检与门禁探测...
-            </span>
+        <!-- 运行动态感知提示横幅 -->
+        {% if is_running %}
+        <div class="bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between text-xs text-amber-200 animate-pulse shadow-lg">
+            <div class="flex items-center gap-3">
+                <span class="animate-spin text-base">⏳</span>
+                <span>
+                    正在以安全平滑速率执行 SEO 质检...
+                </span>
+            </div>
+            <span class="font-mono text-[11px] text-amber-400">表格每 2.5s 实时无感刷新中</span>
         </div>
-        <span class="font-mono text-[11px] text-amber-400">表格每 2.5s 实时无感刷新中</span>
+        {% endif %}
     </div>
-    {% endif %}
 
     <!-- 表格容器：引用模块化的 seo_table.html 组件，支持并发运行时自动局部刷新 -->
     <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl relative"
@@ -95,28 +112,88 @@
             });
     }
 
+    window.seoEntireCategorySelected = false;
+
     function toggleSelectAllSeo(masterCheckbox) {
+        window.seoEntireCategorySelected = false;
         const checkboxes = document.querySelectorAll('.seo-row-checkbox');
         checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
         updateSeoBatchBar();
     }
 
+    function handleSeoRowCheckboxChange(cb) {
+        if (!cb.checked && window.seoEntireCategorySelected) {
+            window.seoEntireCategorySelected = false;
+        }
+        const master = document.getElementById('seo-select-all');
+        const allBoxes = document.querySelectorAll('.seo-row-checkbox');
+        const checkedBoxes = document.querySelectorAll('.seo-row-checkbox:checked');
+        if (master) {
+            master.checked = allBoxes.length > 0 && checkedBoxes.length === allBoxes.length;
+        }
+        updateSeoBatchBar();
+    }
+
+    function selectEntireCategory() {
+        window.seoEntireCategorySelected = true;
+        updateSeoBatchBar();
+    }
+
+    function cancelEntireCategory() {
+        window.seoEntireCategorySelected = false;
+        updateSeoBatchBar();
+    }
+
     function updateSeoBatchBar() {
         const selected = document.querySelectorAll('.seo-row-checkbox:checked');
+        const allBoxes = document.querySelectorAll('.seo-row-checkbox');
         const bar = document.getElementById('seo-batch-bar');
+        if (!bar) return;
+
         const countSpan = document.getElementById('seo-selected-count');
         const master = document.getElementById('seo-select-all');
+        const tip = document.getElementById('seo-select-all-category-tip');
+        const selectedTip = document.getElementById('seo-category-selected-tip');
+        const submitBtn = document.getElementById('seo-batch-submit-btn');
+
+        if (window.seoEntireCategorySelected) {
+            const total = bar.dataset.total || '0';
+            if (countSpan) countSpan.innerText = total;
+            bar.classList.remove('hidden');
+            if (tip) tip.classList.add('hidden');
+            if (selectedTip) selectedTip.classList.remove('hidden');
+            if (submitBtn) {
+                submitBtn.innerHTML = `<span>⚡</span> <span>重新质检该分类全部 ${total} 个网页</span>`;
+                submitBtn.className = "px-3.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition active:scale-95 shadow-lg shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer animate-pulse";
+            }
+            return;
+        }
 
         if (countSpan) countSpan.innerText = selected.length;
         if (selected.length > 0) {
             bar.classList.remove('hidden');
+            if (submitBtn) {
+                submitBtn.innerHTML = `<span>🛡️</span> <span>重新质检选中项 (当前页)</span>`;
+                submitBtn.className = "px-3.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition active:scale-95 shadow-md shadow-amber-950/40 flex items-center gap-1.5 cursor-pointer";
+            }
+            if (selectedTip) selectedTip.classList.add('hidden');
+            if (tip) {
+                if (allBoxes.length > 0 && selected.length === allBoxes.length && master && master.checked) {
+                    tip.classList.remove('hidden');
+                } else {
+                    tip.classList.add('hidden');
+                }
+            }
         } else {
             bar.classList.add('hidden');
             if (master) master.checked = false;
+            if (tip) tip.classList.add('hidden');
+            if (selectedTip) selectedTip.classList.add('hidden');
         }
     }
 
     function clearAllSeoSelection() {
+        window.seoEntireCategorySelected = false;
         const checkboxes = document.querySelectorAll('.seo-row-checkbox');
         checkboxes.forEach(cb => cb.checked = false);
         const master = document.getElementById('seo-select-all');
@@ -125,6 +202,11 @@
     }
 
     function submitSeoBatchRecheck(btn) {
+        if (window.seoEntireCategorySelected) {
+            submitSeoRecheckByFilter(btn);
+            return;
+        }
+
         const selectedCheckboxes = Array.from(document.querySelectorAll('.seo-row-checkbox:checked'));
         if (selectedCheckboxes.length === 0) return;
 
@@ -148,6 +230,47 @@
         })
         .catch(err => {
             showToast('批量质检失败，请检查服务日志', true);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    function submitSeoRecheckByFilter(btn) {
+        const bar = document.getElementById('seo-batch-bar');
+        if (!bar) return;
+        const siteId = parseInt(bar.dataset.siteId) || 1;
+        const status = bar.dataset.status;
+        const q = bar.dataset.query;
+        const total = bar.dataset.total || '0';
+
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span>⏳</span> <span>正在重置并启动质检全部 ${total} 个网页...</span>`;
+
+        fetch('/api/v1/urls/recheck-by-filter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                site_id: siteId,
+                status: status && status.trim() !== '' ? status.trim() : null,
+                q: q && q.trim() !== '' ? q.trim() : null
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('网络异常: ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            showToast(`⚡ 成功重置 ${data.reset_count || total} 个网页！正在以安全平滑速率执行 SEO 质检...`);
+            if (window.htmx) {
+                htmx.trigger(document.body, 'refreshTable');
+            }
+            setTimeout(() => {
+                location.reload();
+            }, 600);
+        })
+        .catch(err => {
+            showToast('分类批量重检失败，请检查服务日志: ' + err.message, true);
             btn.disabled = false;
             btn.innerHTML = originalText;
         });

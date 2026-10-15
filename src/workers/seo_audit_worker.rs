@@ -93,9 +93,34 @@ impl SeoAuditWorker {
                         None
                     };
 
+                    tracing::info!(url = %url.url, ua = ?custom_ua, "🛡️ [SEO Gate] 正在执行本地探测");
+
                     let gate = health_svc.check_url(&url.url, custom_ua.as_deref()).await;
                     let _ = health_repo.insert_from_gate(url.id, &gate).await;
                     let _ = url_repo.persist_seo_scan(url.id, &gate).await;
+
+                    if !gate.passed {
+                        tracing::warn!(
+                            url = %url.url,
+                            http_status = ?gate.http_status,
+                            block_reason = ?gate.block_reason,
+                            "🚫 [SEO Gate] 门禁拦截 / 质检未通过"
+                        );
+                    } else if !gate.warnings.is_empty() {
+                        tracing::warn!(
+                            url = %url.url,
+                            http_status = ?gate.http_status,
+                            warnings = ?gate.warnings,
+                            "⚠️ [SEO Gate] 质检通过但存在优化警告"
+                        );
+                    } else {
+                        tracing::info!(
+                            url = %url.url,
+                            http_status = ?gate.http_status,
+                            "✅ [SEO Gate] 质检完美通过"
+                        );
+                    }
+
                     (url.url, gate.passed)
                 });
             }

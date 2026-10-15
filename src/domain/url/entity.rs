@@ -38,6 +38,14 @@ pub struct Url {
     pub gsc_coverage_state: Option<String>,
     pub gsc_last_crawled_at: Option<DateTime<Utc>>,
     pub gsc_inspected_at: Option<DateTime<Utc>>,
+    pub gsc_verdict: Option<String>,
+    pub gsc_crawled_as: Option<String>,
+    pub gsc_page_fetch_state: Option<String>,
+    pub gsc_robots_txt_state: Option<String>,
+    pub gsc_indexing_state: Option<String>,
+    pub gsc_user_canonical: Option<String>,
+    pub gsc_google_canonical: Option<String>,
+    pub gsc_referring_urls: Option<String>,
 
     // Bing 官方收录检测状态
     pub bing_index_status: String,
@@ -128,6 +136,16 @@ impl Url {
 
     pub fn seo_warnings_list(&self) -> Vec<&str> {
         self.seo_warnings
+            .as_deref()
+            .unwrap_or("")
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
+
+    pub fn referring_urls_list(&self) -> Vec<&str> {
+        self.gsc_referring_urls
             .as_deref()
             .unwrap_or("")
             .lines()

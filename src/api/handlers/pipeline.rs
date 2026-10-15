@@ -51,6 +51,13 @@ pub struct BatchSubmitForm {
     pub provider: String,
 }
 
+#[derive(Deserialize)]
+pub struct RecheckByFilterForm {
+    pub site_id: i64,
+    pub status: Option<String>, // "WARN" | "FAIL" | "PASS" | None (全部)
+    pub q: Option<String>,
+}
+
 fn with_refresh(mut response: Response) -> Response {
     response.headers_mut().insert("HX-Trigger", HX_TRIGGER_REFRESH);
     response
@@ -241,4 +248,64 @@ pub async fn action_batch_submit(
             "submitted_count": success_count
         })),
     )
+}
+
+pub async fn action_recheck_by_filter(
+    State(state): State<AppState>,
+    Json(form): Json<RecheckByFilterForm>,
+) -> Response {
+    let site_id = form.site_id;
+    let status_filter = form.status.as_deref();
+    let q_filter = form.q.as_deref();
+
+    let reset_count = match state
+        .url_service
+        .reset_seo_status_for_recheck(site_id, status_filter, q_filter)
+        .await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!(error = %e, site_id, "重置分类 URL SEO 状态失败");
+            0
+        }
+    };
+
+    // 唤醒 SEO 质检 Worker
+    let started = state.site_service.pipeline.start(site_id, PipelineStage::SeoGate);
+    info!(
+        site_id,
+        reset_count,
+        started,
+        status = ?status_filter,
+        q = ?q_filter,
+        "🔄 [SEO] 分类全量重新质检已触发"
+    );
+
+    let body = Json(serde_json::json!({
+        "success": true,
+        "reset_count": reset_count,
+        "pipeline_started": started,
+    }));
+
+    with_refresh(body.into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_recheck_by_filter_form_deserialization() {
+        let json_data = r#"{"site_id": 1, "status": "WARN", "q": "test"}"#;
+        let form: RecheckByFilterForm = serde_json::from_str(json_data).unwrap();
+        assert_eq!(form.site_id, 1);
+        assert_eq!(form.status.as_deref(), Some("WARN"));
+        assert_eq!(form.q.as_deref(), Some("test"));
+
+        let json_null = r#"{"site_id": 2, "status": null, "q": null}"#;
+        let form2: RecheckByFilterForm = serde_json::from_str(json_null).unwrap();
+        assert_eq!(form2.site_id, 2);
+        assert_eq!(form2.status, None);
+        assert_eq!(form2.q, None);
+    }
 }
